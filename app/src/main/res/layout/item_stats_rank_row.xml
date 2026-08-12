@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One row of a Statistics ranked list (Top genres / Top albums / Top songs see
+     CLAUDE.md, Component 6, the pivot away from pie/bar charts to plain ranked lists). Text
+     appearance is set programmatically per rank tier by StatsRowBinder.addRankRow: rank 1
+     big, ranks 2-3 medium, rank 4+ small and uniform for the rest. The name column wraps
+     instead of ellipsizing so long album/song titles stay fully readable. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:id="@+id/rankName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1" />
+
+    <TextView
+        android:id="@+id/rankValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:gravity="end" />
+
+</LinearLayout>
