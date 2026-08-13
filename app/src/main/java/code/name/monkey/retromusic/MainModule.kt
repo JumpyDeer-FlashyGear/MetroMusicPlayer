@@ -162,7 +162,7 @@ private val viewModules = module {
     }
 
     viewModel {
-        StatisticsViewModel()
+        StatisticsViewModel(get())
     }
 }
 

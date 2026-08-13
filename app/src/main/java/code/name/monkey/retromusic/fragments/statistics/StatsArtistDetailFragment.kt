@@ -20,39 +20,48 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import androidx.core.view.doOnPreDraw
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.navArgs
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.databinding.FragmentStatsArtistDetailBinding
 import code.name.monkey.retromusic.fragments.base.AbsMainActivityFragment
 import code.name.monkey.retromusic.model.Artist
+import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.model.stats.AlbumStat
 import code.name.monkey.retromusic.model.stats.SongStat
+import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.util.MusicUtil
-import code.name.monkey.retromusic.util.stats.MockStatsGenerator
 import code.name.monkey.retromusic.util.stats.StatsRowBinder
 import com.google.android.material.shape.MaterialShapeDrawable
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.android.ext.android.get
 /**
  * Artist detail stats screen (see CLAUDE.md, Component 4; redesigned in Component 6's pivot
  * away from charts). Opened by tapping an artist in Component 3's `StatsArtistsFragment`.
  *
- * No charts, no time window anymore -- just three plain sections, all real/mocked data
- * rendered as ranked text lists via [StatsRowBinder]:
- * - **Overview**: Total Playtime (mock, [MockStatsGenerator.playedMillisFor]), Discography
+ * No charts, no time window anymore -- just three plain sections, all real data rendered as
+ * ranked text lists via [StatsRowBinder]:
+ * - **Overview**: Total Playtime (real, sum of [Artist.songs]' real playtime), Discography
  *   length (real -- sum of every song's actual [code.name.monkey.retromusic.model.Song.duration]
- *   via `artist.songs`, not mocked), Albums ([Artist.albumCount]), Songs ([Artist.songCount]).
+ *   via `artist.songs`), Albums ([Artist.albumCount]), Songs ([Artist.songCount]).
  * - **Top Albums**: every album by this artist ([Artist.albums], uncapped), ranked
- *   descending by mock playtime.
- * - **Top Songs**: every song by this artist ([Artist.songs]), ranked descending by mock
+ *   descending by real playtime (summed from that album's songs).
+ * - **Top Songs**: every song by this artist ([Artist.songs]), ranked descending by real
  *   playtime, capped at [MAX_TOP_SONGS].
  *
  * Both ranked lists use the same 3-tier sizing as the main screen's Top Genres list (rank 1
  * big, ranks 2-3 medium, rank 4+ small) -- confirmed for every ranked list on these screens,
  * see CLAUDE.md.
  *
- * Phase A note: playtime is still backed by [MockStatsGenerator] -- there's no real
- * per-artist/per-album/per-song listening history yet (see CLAUDE.md "Schema reality
- * check"). The artist itself is real, found by id in [libraryViewModel]'s artist list --
- * same lookup-by-id pattern Component 3 used for album taps.
+ * Phase B (Component 7): playtime is real now, resolved the same way this screen's own
+ * Overview total-playtime field, the Genre Detail screen, and the "most played" screen all
+ * resolve it -- [RealRepository.songsWithPlayTime] decorates [Artist.songs] with each
+ * song's real `PlayCountEntity.playTime` in one query; Top Albums sums that per album,
+ * Top Songs reads it per song directly. The artist itself is real, found by id in
+ * [libraryViewModel]'s artist list -- same lookup-by-id pattern Component 3 used for album
+ * taps.
  */
 class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats_artist_detail) {
 
@@ -79,13 +88,20 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
 
     private fun render() {
         val artist = currentArtist ?: return
-        renderOverview(artist)
-        renderTopAlbums(artist)
-        renderTopSongs(artist)
+        lifecycleScope.launch {
+            // One query decorates every song in the discography with its real playtime;
+            // Overview and Top Songs read it directly, Top Albums sums it per album.
+            val songsWithPlayTime = withContext(IO) {
+                get<RealRepository>().songsWithPlayTime(artist.songs)
+            }
+            renderOverview(artist, songsWithPlayTime)
+            renderTopAlbums(artist, songsWithPlayTime)
+            renderTopSongs(songsWithPlayTime)
+        }
     }
 
-    private fun renderOverview(artist: Artist) {
-        val totalPlaytimeMillis = MockStatsGenerator.playedMillisFor(artist.id)
+    private fun renderOverview(artist: Artist, songsWithPlayTime: List<Song>) {
+        val totalPlaytimeMillis = songsWithPlayTime.sumOf { it.playTime }
         val discographyLengthMillis = artist.songs.sumOf { it.duration }
 
         binding.overviewContainer.removeAllViews()
@@ -107,13 +123,15 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
         )
     }
 
-    private fun renderTopAlbums(artist: Artist) {
+    private fun renderTopAlbums(artist: Artist, songsWithPlayTime: List<Song>) {
+        val playTimeByAlbumId = songsWithPlayTime.groupBy { it.albumId }
+            .mapValues { (_, songs) -> songs.sumOf { it.playTime } }
         val stats = artist.albums
             .map { album ->
                 AlbumStat(
                     id = album.id,
                     name = album.title,
-                    playedMillis = MockStatsGenerator.playedMillisFor(album.id)
+                    playedMillis = playTimeByAlbumId[album.id] ?: 0L
                 )
             }
             .sortedByDescending { it.playedMillis }
@@ -126,15 +144,9 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
         }
     }
 
-    private fun renderTopSongs(artist: Artist) {
-        val stats = artist.songs
-            .map { song ->
-                SongStat(
-                    id = song.id,
-                    title = song.title,
-                    playedMillis = MockStatsGenerator.playedMillisFor(song.id)
-                )
-            }
+    private fun renderTopSongs(songsWithPlayTime: List<Song>) {
+        val stats = songsWithPlayTime
+            .map { song -> SongStat(id = song.id, title = song.title, playedMillis = song.playTime) }
             .sortedByDescending { it.playedMillis }
             .take(MAX_TOP_SONGS)
 

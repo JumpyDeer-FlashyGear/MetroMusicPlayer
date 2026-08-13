@@ -30,8 +30,8 @@ import org.koin.androidx.viewmodel.ext.android.viewModel
 /**
  * Statistics screen (see CLAUDE.md, Component 2; redesigned in Component 6's pivot away
  * from charts). No genre legend row, no pie/bar chart toggle, no time window anymore -- just
- * a ranked "Top genres" list against [StatisticsViewModel], which is still backed by a mock
- * generator (see that class's doc comment and CLAUDE.md's "Schema reality check").
+ * a ranked "Top genres" list against [StatisticsViewModel], which is backed by real
+ * per-genre playtime as of Component 7 (see that class's doc comment).
  */
 class StatisticsFragment : Fragment() {
 

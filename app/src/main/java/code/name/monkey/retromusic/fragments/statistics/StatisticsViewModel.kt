@@ -4,23 +4,32 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.map
+import androidx.lifecycle.viewModelScope
 import code.name.monkey.retromusic.model.stats.GenreStat
-import kotlin.random.Random
+import code.name.monkey.retromusic.repository.RealRepository
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
 
 /**
  * ViewModel for the Statistics (main) screen's "Top genres" list (see CLAUDE.md, Component 6
  * -- the pivot away from the pie/bar chart + legend-toggle row to a plain ranked list).
  *
- * Everything here is a mock genre-playtime generator -- there is no repository/DAO backing
- * this yet, since genre and listened-duration aren't tracked anywhere in the schema today
- * (see CLAUDE.md "Schema reality check"). That's Phase B (Component 7). [GenreStat] and the
- * top-N/"Others" grouping logic below are written to survive that swap with minimal changes.
+ * Phase B (Component 7): genre membership is resolved the exact same way
+ * [code.name.monkey.retromusic.fragments.genres.GenreDetailsViewModel] resolves it for the
+ * Genre Detail screen -- [RealRepository.fetchGenres] for the genre list,
+ * [RealRepository.getGenre] per genre for that genre's songs (a live MediaStore query, since
+ * genre membership isn't stored in Room -- see CLAUDE.md "Schema reality check"). Playtime is
+ * resolved the same way the Genre/Artist/Album detail screens and the "most played" screen
+ * already resolve it: [RealRepository.playCountSongs], the real per-song
+ * `PlayCountEntity.playTime` column that the playback service
+ * (`SongPlayCountHelper`/`MusicService.saveSongPlayTime`) already keeps up to date. No new
+ * schema, DAO, or playback hook was needed for this -- it already existed in this repo (see
+ * CLAUDE.md's Component 7 update).
  *
  * Time windows have been removed entirely from every Statistics screen (see CLAUDE.md,
- * Component 6), so this always reflects All Time -- the mock data is generated once and
- * never regenerated.
+ * Component 6), so this always reflects All Time.
  */
-class StatisticsViewModel : ViewModel() {
+class StatisticsViewModel(private val realRepository: RealRepository) : ViewModel() {
 
     private val _genreStats = MutableLiveData<List<GenreStat>>()
 
@@ -47,16 +56,18 @@ class StatisticsViewModel : ViewModel() {
     val totalPlaytimeMillis: LiveData<Long> = _genreStats.map { stats -> stats.sumOf { it.playedMillis } }
 
     init {
-        regenerateMockStats()
+        loadGenreStats()
     }
 
-    /** Phase A placeholder data -- see CLAUDE.md "Schema reality check". */
-    private fun regenerateMockStats() {
-        val random = Random(MOCK_SEED)
-        _genreStats.value = MOCK_GENRE_NAMES.mapIndexed { index, name ->
-            val baseMinutes = (MOCK_GENRE_NAMES.size - index) * 47 + random.nextInt(0, 30)
-            GenreStat(id = index.toLong(), name = name, playedMillis = baseMinutes * 60_000L)
+    private fun loadGenreStats() = viewModelScope.launch(IO) {
+        val genres = realRepository.fetchGenres()
+        val playTimeBySongId = realRepository.playCountSongs().associate { it.id to it.playTime }
+        val stats = genres.map { genre ->
+            val playedMillis = realRepository.getGenre(genre.id)
+                .sumOf { song -> playTimeBySongId[song.id] ?: 0L }
+            GenreStat(id = genre.id, name = genre.name, playedMillis = playedMillis)
         }
+        _genreStats.postValue(stats)
     }
 
     companion object {
@@ -68,11 +79,5 @@ class StatisticsViewModel : ViewModel() {
 
         /** A genre only gets its own row if it has more than this much playtime -- confirmed at 3 hours, see CLAUDE.md. */
         private const val MIN_DISPLAY_MILLIS = 3 * 60 * 60 * 1000L
-
-        private const val MOCK_SEED = 20260806L
-        private val MOCK_GENRE_NAMES = listOf(
-            "Rock", "Pop", "Hip-Hop", "Electronic", "Jazz",
-            "Classical", "R&B", "Metal", "Indie", "Reggae"
-        )
     }
 }

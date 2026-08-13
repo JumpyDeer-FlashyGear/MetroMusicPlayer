@@ -20,16 +20,22 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import androidx.core.view.doOnPreDraw
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.navArgs
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.databinding.FragmentStatsAlbumDetailBinding
 import code.name.monkey.retromusic.fragments.base.AbsMainActivityFragment
 import code.name.monkey.retromusic.model.Album
+import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.model.stats.SongStat
+import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.util.MusicUtil
-import code.name.monkey.retromusic.util.stats.MockStatsGenerator
 import code.name.monkey.retromusic.util.stats.StatsRowBinder
 import com.google.android.material.shape.MaterialShapeDrawable
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.android.ext.android.get
 
 /**
  * Album detail stats screen (see CLAUDE.md, Component 5; redesigned in Component 6's pivot
@@ -47,10 +53,11 @@ import com.google.android.material.shape.MaterialShapeDrawable
  * chart-card structure, minus the by-album pie section), not a copy with a section removed
  * after the fact.
  *
- * Phase A note: playtime is still backed by [MockStatsGenerator] -- there's no real
- * per-album/per-song listening history yet (see CLAUDE.md "Schema reality check"). The
- * album itself is real, found by id in [libraryViewModel]'s album list -- same
- * lookup-by-id pattern Component 4 used for its artist lookup.
+ * Phase B (Component 7): playtime is real now, resolved the same way
+ * [StatsArtistDetailFragment] resolves it -- [RealRepository.songsWithPlayTime] decorates
+ * [Album.songs] with each song's real `PlayCountEntity.playTime` in one query. The album
+ * itself is real, found by id in [libraryViewModel]'s album list -- same lookup-by-id
+ * pattern Component 4 used for its artist lookup.
  */
 class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats_album_detail) {
 
@@ -77,12 +84,17 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
 
     private fun render() {
         val album = currentAlbum ?: return
-        renderOverview(album)
-        renderTopSongs(album)
+        lifecycleScope.launch {
+            val songsWithPlayTime = withContext(IO) {
+                get<RealRepository>().songsWithPlayTime(album.songs)
+            }
+            renderOverview(album, songsWithPlayTime)
+            renderTopSongs(songsWithPlayTime)
+        }
     }
 
-    private fun renderOverview(album: Album) {
-        val totalPlaytimeMillis = MockStatsGenerator.playedMillisFor(album.id)
+    private fun renderOverview(album: Album, songsWithPlayTime: List<Song>) {
+        val totalPlaytimeMillis = songsWithPlayTime.sumOf { it.playTime }
         val albumLengthMillis = album.songs.sumOf { it.duration }
 
         binding.overviewContainer.removeAllViews()
@@ -101,15 +113,9 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
         )
     }
 
-    private fun renderTopSongs(album: Album) {
-        val stats = album.songs
-            .map { song ->
-                SongStat(
-                    id = song.id,
-                    title = song.title,
-                    playedMillis = MockStatsGenerator.playedMillisFor(song.id)
-                )
-            }
+    private fun renderTopSongs(songsWithPlayTime: List<Song>) {
+        val stats = songsWithPlayTime
+            .map { song -> SongStat(id = song.id, title = song.title, playedMillis = song.playTime) }
             .sortedByDescending { it.playedMillis }
 
         binding.topSongsContainer.removeAllViews()

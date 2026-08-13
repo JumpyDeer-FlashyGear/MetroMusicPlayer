@@ -22,6 +22,7 @@ import android.view.View
 import androidx.core.os.bundleOf
 import androidx.core.view.doOnPreDraw
 import androidx.core.view.isVisible
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.GridLayoutManager
 import code.name.monkey.retromusic.R
@@ -30,9 +31,13 @@ import code.name.monkey.retromusic.databinding.FragmentStatsMediaListBinding
 import code.name.monkey.retromusic.fragments.base.AbsMainActivityFragment
 import code.name.monkey.retromusic.interfaces.IAlbumClickListener
 import code.name.monkey.retromusic.model.Album
+import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.util.RetroUtil
-import code.name.monkey.retromusic.util.stats.MockStatsGenerator
 import com.google.android.material.shape.MaterialShapeDrawable
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.android.ext.android.get
 
 /**
  * Albums sorted by total listened time (see CLAUDE.md, Component 3). Mirrors
@@ -46,6 +51,11 @@ import com.google.android.material.shape.MaterialShapeDrawable
  * Time window has been removed entirely (see CLAUDE.md, Component 6) -- this screen always
  * shows All-Time playtime now, so there's no per-screen time-window ViewModel or
  * time-window button here anymore (the old `StatsTimeWindowViewModel` is deleted).
+ *
+ * Phase B (Component 7): both the album list and the playtime used to sort/label it are
+ * real now -- see [StatsArtistsFragment]'s doc comment for the pattern this mirrors
+ * (per-album playtime summed from [Album.songs]' real `PlayCountEntity.playTime`, one
+ * playtime query for the whole list).
  */
 class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_media_list),
     IAlbumClickListener {
@@ -77,13 +87,18 @@ class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_medi
     }
 
     private fun render() {
-        val playtimeByAlbumId = latestAlbums.associate { album ->
-            album.id to MockStatsGenerator.playedMillisFor(album.id)
+        lifecycleScope.launch {
+            val playtimeByAlbumId = withContext(IO) {
+                val playTimeBySongId = get<RealRepository>().playCountSongs().associate { it.id to it.playTime }
+                latestAlbums.associate { album ->
+                    album.id to album.songs.sumOf { song -> playTimeBySongId[song.id] ?: 0L }
+                }
+            }
+            val sorted = latestAlbums.sortedByDescending { playtimeByAlbumId.getValue(it.id) }
+            adapter.playtimeMillisByAlbumId = playtimeByAlbumId
+            adapter.swapDataSet(sorted)
+            binding.empty.isVisible = sorted.isEmpty()
         }
-        val sorted = latestAlbums.sortedByDescending { playtimeByAlbumId.getValue(it.id) }
-        adapter.playtimeMillisByAlbumId = playtimeByAlbumId
-        adapter.swapDataSet(sorted)
-        binding.empty.isVisible = sorted.isEmpty()
     }
 
     private fun gridCount(): Int {
@@ -97,7 +112,7 @@ class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_medi
         val album = latestAlbums.firstOrNull { it.id == albumId } ?: return
         // Component 5 (album detail stats) -- see CLAUDE.md. Passes albumId (not just the
         // name) since StatsAlbumDetailFragment needs the real id to look the album back up
-        // via LibraryViewModel and to key MockStatsGenerator's per-album mock data.
+        // via LibraryViewModel and to key its per-album real playtime lookup.
         findNavController().navigate(
             R.id.statsAlbumDetailFragment,
             bundleOf("albumId" to album.id, "albumName" to album.title)

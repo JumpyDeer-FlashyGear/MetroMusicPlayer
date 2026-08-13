@@ -22,6 +22,7 @@ import android.view.View
 import androidx.core.os.bundleOf
 import androidx.core.view.doOnPreDraw
 import androidx.core.view.isVisible
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.GridLayoutManager
 import code.name.monkey.retromusic.R
@@ -30,9 +31,13 @@ import code.name.monkey.retromusic.databinding.FragmentStatsMediaListBinding
 import code.name.monkey.retromusic.fragments.base.AbsMainActivityFragment
 import code.name.monkey.retromusic.interfaces.IArtistClickListener
 import code.name.monkey.retromusic.model.Artist
+import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.util.RetroUtil
-import code.name.monkey.retromusic.util.stats.MockStatsGenerator
 import com.google.android.material.shape.MaterialShapeDrawable
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.android.ext.android.get
 
 /**
  * Artists sorted by total listened time (see CLAUDE.md, Component 3).
@@ -49,10 +54,12 @@ import com.google.android.material.shape.MaterialShapeDrawable
  * shows All-Time playtime now, so there's no per-screen time-window ViewModel or
  * time-window button here anymore (the old `StatsTimeWindowViewModel` is deleted).
  *
- * Phase A note: like every Statistics screen, the ranking itself is mocked (see
- * [code.name.monkey.retromusic.util.stats.MockStatsGenerator]) — the artist list is real
- * (from `LibraryViewModel`), only the playtime used to sort/label it isn't, since nothing
- * tracks real listened duration yet (CLAUDE.md "Schema reality check").
+ * Phase B (Component 7): both the artist list and the playtime used to sort/label it are
+ * real now. Per-artist playtime is the sum of [Artist.songs]' real
+ * `PlayCountEntity.playTime`, looked up via [RealRepository.playCountSongs] -- the same
+ * source the Genre Detail / Artist Detail / Album Detail screens already use (CLAUDE.md's
+ * Component 7 update). One playtime query covers every artist in the list rather than
+ * querying per artist.
  */
 class StatsArtistsFragment : AbsMainActivityFragment(R.layout.fragment_stats_media_list),
     IArtistClickListener {
@@ -84,13 +91,18 @@ class StatsArtistsFragment : AbsMainActivityFragment(R.layout.fragment_stats_med
     }
 
     private fun render() {
-        val playtimeByArtistId = latestArtists.associate { artist ->
-            artist.id to MockStatsGenerator.playedMillisFor(artist.id)
+        lifecycleScope.launch {
+            val playtimeByArtistId = withContext(IO) {
+                val playTimeBySongId = get<RealRepository>().playCountSongs().associate { it.id to it.playTime }
+                latestArtists.associate { artist ->
+                    artist.id to artist.songs.sumOf { song -> playTimeBySongId[song.id] ?: 0L }
+                }
+            }
+            val sorted = latestArtists.sortedByDescending { playtimeByArtistId.getValue(it.id) }
+            adapter.playtimeMillisByArtistId = playtimeByArtistId
+            adapter.swapDataSet(sorted)
+            binding.empty.isVisible = sorted.isEmpty()
         }
-        val sorted = latestArtists.sortedByDescending { playtimeByArtistId.getValue(it.id) }
-        adapter.playtimeMillisByArtistId = playtimeByArtistId
-        adapter.swapDataSet(sorted)
-        binding.empty.isVisible = sorted.isEmpty()
     }
 
     private fun gridCount(): Int {
@@ -104,7 +116,7 @@ class StatsArtistsFragment : AbsMainActivityFragment(R.layout.fragment_stats_med
         val artist = latestArtists.firstOrNull { it.id == artistId } ?: return
         // Component 4 (artist detail stats) -- see CLAUDE.md. Passes artistId (not just the
         // name) since StatsArtistDetailFragment needs the real id to look the artist back up
-        // via LibraryViewModel and to key MockStatsGenerator's per-artist/per-album mock data.
+        // via LibraryViewModel and to key its per-artist/per-album real playtime lookups.
         findNavController().navigate(
             R.id.statsArtistDetailFragment,
             bundleOf("artistId" to artist.id, "artistName" to artist.name)
