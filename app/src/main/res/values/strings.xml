@@ -502,6 +502,10 @@
     <string name="stats_album_length">Album length</string>
     <string name="stats_top_albums">Top Albums</string>
     <string name="stats_top_songs">Top Songs</string>
+    <string name="stats_unknown_genre">—</string>
+    <string name="stats_view_album">View Album</string>
+    <string name="stats_view_artist">View Artist</string>
+    <string name="stats_view_stats">View Stats</string>
     <string name="simple">Simple</string>
     <string name="sleep_timer_canceled">Sleep timer canceled.</string>
     <string name="sleep_timer_set">Sleep timer set for %d minutes from now.</string>
@@ -542,8 +546,6 @@
     <string name="title">Title</string>
     <string name="title_new_backup">New Backup</string>
     <string name="today">Today</string>
-    <string name="top_albums">Top albums</string>
-    <string name="top_artists">Top artists</string>
     <string name="track_hint">"Track (2 for track 2 or 3004 for CD3 track 4)"</string>
     <string name="track_list">Track number</string>
     <string name="translate">Translate</string>

@@ -51,4 +51,9 @@
         android:title="@string/action_delete_from_device"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/action_view_stats"
+        android:title="@string/stats_view_stats"
+        app:showAsAction="never" />
+
 </menu>

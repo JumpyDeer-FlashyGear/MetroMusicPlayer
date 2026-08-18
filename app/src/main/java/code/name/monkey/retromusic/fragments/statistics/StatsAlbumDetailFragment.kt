@@ -19,18 +19,24 @@ import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
+import androidx.core.os.bundleOf
 import androidx.core.view.doOnPreDraw
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
+import code.name.monkey.retromusic.EXTRA_ALBUM_ID
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.databinding.FragmentStatsAlbumDetailBinding
 import code.name.monkey.retromusic.fragments.base.AbsMainActivityFragment
+import code.name.monkey.retromusic.glide.RetroGlideExtension
+import code.name.monkey.retromusic.glide.RetroGlideExtension.albumCoverOptions
 import code.name.monkey.retromusic.model.Album
 import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.model.stats.SongStat
 import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.stats.StatsRowBinder
+import com.bumptech.glide.Glide
 import com.google.android.material.shape.MaterialShapeDrawable
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -77,9 +83,20 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
             MaterialShapeDrawable.createWithElevationOverlay(requireContext())
 
         libraryViewModel.getAlbums().observe(viewLifecycleOwner) { albums ->
-            currentAlbum = albums.firstOrNull { it.id == args.albumId }
+            val album = albums.firstOrNull { it.id == args.albumId }
+            currentAlbum = album
+            if (album != null) {
+                loadAlbumCover(album)
+            }
             render()
         }
+    }
+
+    private fun loadAlbumCover(album: Album) {
+        Glide.with(requireContext())
+            .load(RetroGlideExtension.getSongModel(album.safeGetFirstSong()))
+            .albumCoverOptions(album.safeGetFirstSong())
+            .into(binding.albumCoverImage)
     }
 
     private fun render() {
@@ -88,12 +105,35 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
             val songsWithPlayTime = withContext(IO) {
                 get<RealRepository>().songsWithPlayTime(album.songs)
             }
-            renderOverview(album, songsWithPlayTime)
+            val genreName = withContext(IO) { resolveAlbumGenre(album) }
+            renderOverview(album, songsWithPlayTime, genreName)
             renderTopSongs(songsWithPlayTime)
         }
     }
 
-    private fun renderOverview(album: Album, songsWithPlayTime: List<Song>) {
+    /**
+     * Genre membership isn't stored in Room (see CLAUDE.md, "Schema reality check") -- the
+     * only way to resolve a song's genre is the live [RealRepository.fetchGenres] /
+     * [RealRepository.getGenre] pair [StatisticsViewModel] already uses for the main Top
+     * Genres list. There's no per-song reverse lookup, so this walks every genre's song list
+     * looking for one of this album's song ids. If the album's songs span more than one
+     * genre (uncommon, but MediaStore doesn't enforce a single genre per album), the first
+     * match wins -- same one-genre-per-album assumption the rest of this screen makes.
+     */
+    private suspend fun resolveAlbumGenre(album: Album): String? {
+        val albumSongIds = album.songs.map { it.id }.toSet()
+        val realRepository = get<RealRepository>()
+        val genres = realRepository.fetchGenres()
+        for (genre in genres) {
+            val genreSongIds = realRepository.getGenre(genre.id).map { it.id }.toSet()
+            if (genreSongIds.any { it in albumSongIds }) {
+                return genre.name
+            }
+        }
+        return null
+    }
+
+    private fun renderOverview(album: Album, songsWithPlayTime: List<Song>, genreName: String?) {
         val totalPlaytimeMillis = songsWithPlayTime.sumOf { it.playTime }
         val albumLengthMillis = album.songs.sumOf { it.duration }
 
@@ -110,6 +150,9 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
         )
         StatsRowBinder.addOverviewRow(
             inflater, container, getString(R.string.songs), album.songCount.toString()
+        )
+        StatsRowBinder.addOverviewRow(
+            inflater, container, getString(R.string.genre), genreName ?: getString(R.string.stats_unknown_genre)
         )
     }
 
@@ -132,8 +175,19 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
     }
 
     override fun onCreateMenu(menu: Menu, inflater: MenuInflater) {
-        // No screen-specific menu items -- same as Component 4's artist detail screen.
+        // "View Album" -- jumps back to the real AlbumDetailsFragment for this album, the
+        // counterpart to the "View Stats" action AlbumDetailsFragment's own menu now has.
+        inflater.inflate(R.menu.menu_stats_album_detail, menu)
     }
 
-    override fun onMenuItemSelected(item: MenuItem): Boolean = false
+    override fun onMenuItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_view_album) {
+            findNavController().navigate(
+                R.id.albumDetailsFragment,
+                bundleOf(EXTRA_ALBUM_ID to args.albumId)
+            )
+            return true
+        }
+        return false
+    }
 }

@@ -19,9 +19,13 @@ import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
+import androidx.core.os.bundleOf
 import androidx.core.view.doOnPreDraw
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
+import code.name.monkey.retromusic.EXTRA_ARTIST_ID
+import code.name.monkey.retromusic.EXTRA_ARTIST_NAME
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.databinding.FragmentStatsArtistDetailBinding
 import code.name.monkey.retromusic.fragments.base.AbsMainActivityFragment
@@ -31,6 +35,7 @@ import code.name.monkey.retromusic.model.stats.AlbumStat
 import code.name.monkey.retromusic.model.stats.SongStat
 import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.util.MusicUtil
+import code.name.monkey.retromusic.util.PreferenceUtil
 import code.name.monkey.retromusic.util.stats.StatsRowBinder
 import com.google.android.material.shape.MaterialShapeDrawable
 import kotlinx.coroutines.Dispatchers.IO
@@ -164,10 +169,31 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
     }
 
     override fun onCreateMenu(menu: Menu, inflater: MenuInflater) {
-        // No screen-specific menu items -- same as Component 3's list screens.
+        // "View Artist" -- jumps back to the real artist detail screen, the counterpart to
+        // the "View Stats" action AbsArtistDetailsFragment's own menu now has. Branches the
+        // same way ArtistAdapter's click handler does: libraryViewModel.getArtists() (which
+        // this screen's currentArtist was looked up from) returns album-artists when
+        // PreferenceUtil.albumArtistsOnly is on, so the destination has to match.
+        inflater.inflate(R.menu.menu_stats_artist_detail, menu)
     }
 
-    override fun onMenuItemSelected(item: MenuItem): Boolean = false
+    override fun onMenuItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_view_artist) {
+            if (PreferenceUtil.albumArtistsOnly) {
+                findNavController().navigate(
+                    R.id.albumArtistDetailsFragment,
+                    bundleOf(EXTRA_ARTIST_NAME to args.artistName)
+                )
+            } else {
+                findNavController().navigate(
+                    R.id.artistDetailsFragment,
+                    bundleOf(EXTRA_ARTIST_ID to args.artistId)
+                )
+            }
+            return true
+        }
+        return false
+    }
 
     private companion object {
         /** Top Songs is capped, unlike Top Albums -- confirmed at 15, see CLAUDE.md. */

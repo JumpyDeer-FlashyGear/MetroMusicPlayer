@@ -46,12 +46,8 @@ interface Repository {
     suspend fun artistById(artistId: Long): Artist
     suspend fun albumArtistByName(name: String): Artist
     suspend fun recentArtists(): List<Artist>
-    suspend fun topArtists(): List<Artist>
-    suspend fun topAlbums(): List<Album>
     suspend fun recentAlbums(): List<Album>
     suspend fun recentArtistsHome(): Home
-    suspend fun topArtistsHome(): Home
-    suspend fun topAlbumsHome(): Home
     suspend fun recentAlbumsHome(): Home
     suspend fun favoritePlaylistHome(): Home
     suspend fun suggestions(): List<Song>
@@ -140,10 +136,6 @@ class RealRepository(
 
     override suspend fun recentAlbums(): List<Album> = lastAddedRepository.recentAlbums()
 
-    override suspend fun topArtists(): List<Artist> = topPlayedRepository.topArtists()
-
-    override suspend fun topAlbums(): List<Album> = topPlayedRepository.topAlbums()
-
     override suspend fun fetchLegacyPlaylist(): List<Playlist> = playlistRepository.playlists()
 
     override suspend fun fetchGenres(): List<Genre> = genreRepository.genres()
@@ -165,8 +157,6 @@ class RealRepository(
     override suspend fun homeSections(): List<Home> {
         val homeSections = mutableListOf<Home>()
         val sections: List<Home> = listOf(
-            topArtistsHome(),
-            topAlbumsHome(),
             recentArtistsHome(),
             recentAlbumsHome(),
             favoritePlaylistHome()
@@ -303,16 +293,6 @@ class RealRepository(
     override suspend fun recentAlbumsHome(): Home {
         val albums = lastAddedRepository.recentAlbums().take(5)
         return Home(albums, RECENT_ALBUMS, R.string.recent_albums)
-    }
-
-    override suspend fun topAlbumsHome(): Home {
-        val albums = topPlayedRepository.topAlbums().take(5)
-        return Home(albums, TOP_ALBUMS, R.string.top_albums)
-    }
-
-    override suspend fun topArtistsHome(): Home {
-        val artists = topPlayedRepository.topArtists().take(5)
-        return Home(artists, TOP_ARTISTS, R.string.top_artists)
     }
 
     override suspend fun favoritePlaylistHome(): Home {

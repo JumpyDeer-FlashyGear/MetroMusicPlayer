@@ -20,8 +20,6 @@ import androidx.core.animation.doOnEnd
 import androidx.lifecycle.*
 import code.name.monkey.retromusic.RECENT_ALBUMS
 import code.name.monkey.retromusic.RECENT_ARTISTS
-import code.name.monkey.retromusic.TOP_ALBUMS
-import code.name.monkey.retromusic.TOP_ARTISTS
 import code.name.monkey.retromusic.db.*
 import code.name.monkey.retromusic.*
 import code.name.monkey.retromusic.extensions.showToast
@@ -266,7 +264,6 @@ class LibraryViewModel(
 
     fun artists(type: Int): LiveData<List<Artist>> = liveData(IO) {
         when (type) {
-            TOP_ARTISTS -> emit(repository.topArtists())
             RECENT_ARTISTS -> {
                 emit(repository.recentArtists())
             }
@@ -275,7 +272,6 @@ class LibraryViewModel(
 
     fun albums(type: Int): LiveData<List<Album>> = liveData(IO) {
         when (type) {
-            TOP_ALBUMS -> emit(repository.topAlbums())
             RECENT_ALBUMS -> {
                 emit(repository.recentAlbums())
             }

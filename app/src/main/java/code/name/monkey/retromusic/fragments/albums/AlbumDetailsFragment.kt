@@ -351,6 +351,14 @@ class AlbumDetailsFragment : AbsMainActivityFragment(R.layout.fragment_album_det
             R.id.action_sort_order_title_desc -> sortOrder = SONG_Z_A
             R.id.action_sort_order_track_list -> sortOrder = SONG_TRACK_LIST
             R.id.action_sort_order_artist_song_duration -> sortOrder = SONG_DURATION
+
+            R.id.action_view_stats -> {
+                findNavController().navigate(
+                    R.id.statsAlbumDetailFragment,
+                    bundleOf("albumId" to album.id, "albumName" to album.title)
+                )
+                return true
+            }
         }
         if (sortOrder != null) {
             item.isChecked = true

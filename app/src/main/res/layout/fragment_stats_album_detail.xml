@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Album detail stats screen (see CLAUDE.md, Component 5; redesigned in Component 6's
-     pivot away from charts). Structured like fragment_stats_artist_detail.xml (Overview
-     block) minus the "Albums" row and with a single ranked list, "Top Songs", showing
-     every song on this album (not capped, unlike the artist screen's Top Songs). -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true">
@@ -30,6 +27,7 @@
         android:layout_height="match_parent"
         android:clipToPadding="false"
         android:overScrollMode="@integer/overScrollMode"
+        android:paddingBottom="@dimen/mini_player_height"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <LinearLayout
@@ -41,15 +39,34 @@
             android:paddingEnd="16dp"
             android:paddingBottom="24dp">
 
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <ImageView
+                    android:id="@+id/albumCoverImage"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:contentDescription="@string/album"
+                    android:scaleType="centerCrop"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintDimensionRatio="1:1"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintWidth_percent="0.7"
+                    tools:src="@drawable/default_album_art" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
                 android:text="@string/stats_overview"
                 android:textAppearance="@style/TextViewSubtitle1"
                 android:textStyle="bold" />
 
-            <!-- populated at runtime: total playtime, album length, songs see
-                 statsalbumdetailfragment.renderoverview. -->
             <LinearLayout
                 android:id="@+id/overviewContainer"
                 android:layout_width="match_parent"

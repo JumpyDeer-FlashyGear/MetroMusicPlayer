@@ -53,9 +53,9 @@ class HomeAdapter(private val activity: AppCompatActivity) :
         val layout =
             LayoutInflater.from(activity).inflate(R.layout.section_recycler_view, parent, false)
         return when (viewType) {
-            RECENT_ARTISTS, TOP_ARTISTS -> ArtistViewHolder(layout)
+            RECENT_ARTISTS -> ArtistViewHolder(layout)
             FAVOURITES -> PlaylistViewHolder(layout)
-            TOP_ALBUMS, RECENT_ALBUMS -> AlbumViewHolder(layout)
+            RECENT_ALBUMS -> AlbumViewHolder(layout)
             else -> {
                 ArtistViewHolder(layout)
             }
@@ -76,17 +76,6 @@ class HomeAdapter(private val activity: AppCompatActivity) :
                     )
                 }
             }
-            TOP_ALBUMS -> {
-                val viewHolder = holder as AlbumViewHolder
-                viewHolder.bindView(home)
-                viewHolder.clickableArea.setOnClickListener {
-                    it.findFragment<HomeFragment>().setSharedAxisXTransitions()
-                    activity.findNavController(R.id.fragment_container).navigate(
-                        R.id.detailListFragment,
-                        bundleOf("type" to TOP_ALBUMS)
-                    )
-                }
-            }
             RECENT_ARTISTS -> {
                 val viewHolder = holder as ArtistViewHolder
                 viewHolder.bindView(home)
@@ -95,17 +84,6 @@ class HomeAdapter(private val activity: AppCompatActivity) :
                     activity.findNavController(R.id.fragment_container).navigate(
                         R.id.detailListFragment,
                         bundleOf("type" to RECENT_ARTISTS)
-                    )
-                }
-            }
-            TOP_ARTISTS -> {
-                val viewHolder = holder as ArtistViewHolder
-                viewHolder.bindView(home)
-                viewHolder.clickableArea.setOnClickListener {
-                    it.findFragment<HomeFragment>().setSharedAxisXTransitions()
-                    activity.findNavController(R.id.fragment_container).navigate(
-                        R.id.detailListFragment,
-                        bundleOf("type" to TOP_ARTISTS)
                     )
                 }
             }

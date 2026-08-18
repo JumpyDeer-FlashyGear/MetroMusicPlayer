@@ -216,6 +216,14 @@ abstract class AbsArtistDetailsFragment : AbsMainActivityFragment(R.layout.fragm
                 forceDownload = true
                 return true
             }
+
+            R.id.action_view_stats -> {
+                findNavController().navigate(
+                    R.id.statsArtistDetailFragment,
+                    bundleOf("artistId" to artist.id, "artistName" to artist.name)
+                )
+                return true
+            }
         }
         return true
     }

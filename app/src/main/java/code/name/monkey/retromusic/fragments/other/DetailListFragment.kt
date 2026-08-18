@@ -58,9 +58,7 @@ class DetailListFragment : AbsMainActivityFragment(R.layout.fragment_playlist_de
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         when (args.type) {
-            TOP_ARTISTS,
             RECENT_ARTISTS,
-            TOP_ALBUMS,
             RECENT_ALBUMS,
             FAVOURITES,
             -> {
@@ -82,9 +80,7 @@ class DetailListFragment : AbsMainActivityFragment(R.layout.fragment_playlist_de
         mainActivity.setSupportActionBar(binding.toolbar)
         binding.progressIndicator.hide()
         when (args.type) {
-            TOP_ARTISTS -> loadArtists(R.string.top_artists, TOP_ARTISTS)
             RECENT_ARTISTS -> loadArtists(R.string.recent_artists, RECENT_ARTISTS)
-            TOP_ALBUMS -> loadAlbums(R.string.top_albums, TOP_ALBUMS)
             RECENT_ALBUMS -> loadAlbums(R.string.recent_albums, RECENT_ALBUMS)
             FAVOURITES -> loadFavorite()
             HISTORY_PLAYLIST -> {

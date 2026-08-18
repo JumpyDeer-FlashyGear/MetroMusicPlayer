@@ -29,6 +29,7 @@
         android:layout_height="match_parent"
         android:clipToPadding="false"
         android:overScrollMode="@integer/overScrollMode"
+        android:paddingBottom="@dimen/mini_player_height"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <LinearLayout

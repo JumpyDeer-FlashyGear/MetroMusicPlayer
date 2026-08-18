@@ -19,8 +19,6 @@ import android.database.Cursor
 import android.provider.BaseColumns
 import android.provider.MediaStore
 import code.name.monkey.retromusic.Constants.NUMBER_OF_TOP_TRACKS
-import code.name.monkey.retromusic.model.Album
-import code.name.monkey.retromusic.model.Artist
 import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.providers.HistoryStore
 import code.name.monkey.retromusic.providers.SongPlayCountStore
@@ -37,10 +35,6 @@ interface TopPlayedRepository {
     fun topTracks(): List<Song>
 
     fun notRecentlyPlayedTracks(): List<Song>
-
-    fun topAlbums(): List<Album>
-
-    fun topArtists(): List<Artist>
 }
 
 class RealTopPlayedRepository(
@@ -79,15 +73,6 @@ class RealTopPlayedRepository(
         allSongs.addAll(notRecentlyPlayedSongs)
         return allSongs
     }
-
-    override fun topAlbums(): List<Album> {
-        return albumRepository.splitIntoAlbums(topTracks(), sorted = false)
-    }
-
-    override fun topArtists(): List<Artist> {
-        return artistRepository.splitIntoArtists(topAlbums())
-    }
-
 
     private fun makeTopTracksCursorAndClearUpDatabase(): Cursor? {
         val retCursor = makeTopTracksCursorImpl()
