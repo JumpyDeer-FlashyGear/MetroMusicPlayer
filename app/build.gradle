@@ -19,6 +19,8 @@ android {
         versionName '6.1.0'
 
         multiDexEnabled true
+
+        resConfigs "en", "ar", "fr", "it"
     }
     signingConfigs {
         release {

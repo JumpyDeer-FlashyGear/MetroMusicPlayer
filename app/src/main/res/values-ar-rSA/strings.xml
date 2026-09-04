@@ -534,8 +534,6 @@
     <string name="title">عنوان</string>
     <string name="title_new_backup">نسخة احتياطية جديدة</string>
     <string name="today">اليوم</string>
-    <string name="top_albums">افضل الالبومات</string>
-    <string name="top_artists">افضل الفنانين</string>
     <string name="track_hint">"المسار (2 للمسار 2 أو 3004 لمسار CD3 4)"</string>
     <string name="track_list">رقم المسار</string>
     <string name="translate">ترجمة</string>

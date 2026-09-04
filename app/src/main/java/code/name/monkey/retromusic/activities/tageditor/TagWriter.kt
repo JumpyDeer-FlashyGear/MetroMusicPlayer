@@ -140,7 +140,6 @@ class TagWriter {
                         e.printStackTrace()
                     }
                 }
-                var wroteArtwork = false
                 var deletedArtwork = false
                 for (filePath in info.filePaths!!) {
                     try {
@@ -175,7 +174,6 @@ class TagWriter {
                             } else if (artwork != null) {
                                 tag.deleteArtworkField()
                                 tag.setField(artwork)
-                                wroteArtwork = true
                             }
                         }
                         audioFile.commit()
@@ -193,9 +191,16 @@ class TagWriter {
                         e.printStackTrace()
                     }
                 }
-                if (wroteArtwork) {
-                    insertAlbumArt(context, info.artworkInfo!!.albumId, albumArtFile!!.path)
-                } else if (deletedArtwork) {
+                if (deletedArtwork) {
+                    // insertAlbumArt() is deliberately NOT called for the wroteArtwork case here:
+                    // it requires its _data path to be under public/external storage, but
+                    // createAlbumArtDir() puts albumArtFile under context.cacheDir on R+ (scoped
+                    // storage), so that insert can never pass MediaProvider's path validation and
+                    // will always throw. The artwork is already embedded into the file's own tag
+                    // above; once the caller writes the cache file back via the
+                    // MediaStore.createWriteRequest() flow and calls scan(), that rescan is what
+                    // actually surfaces the new album art. deleteAlbumArt() has no such path
+                    // requirement (delete-by-id only), so it's still safe to call here.
                     deleteAlbumArt(context, info.artworkInfo!!.albumId)
                 }
                 cacheFiles

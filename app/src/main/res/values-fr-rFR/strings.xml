@@ -523,8 +523,6 @@
     <string name="title">Titre</string>
     <string name="title_new_backup">Nouvelle sauvegarde</string>
     <string name="today">Aujourd\'hui</string>
-    <string name="top_albums">Meilleurs albums</string>
-    <string name="top_artists">Top artistes</string>
     <string name="track_hint">"Morceau (2 pour morceau 2, 3004 pour morceau 4 du CD 3)"</string>
     <string name="track_list">Numéro du morceau</string>
     <string name="translate">Traduction</string>

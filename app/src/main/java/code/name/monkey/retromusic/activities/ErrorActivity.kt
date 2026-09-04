@@ -14,7 +14,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class ErrorActivity : AppCompatActivity() {
-    private val dayFormat: DateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    private val dayFormat: DateFormat = SimpleDateFormat("yyyy-MM-dd-hh-mm-ss", Locale.getDefault())
     private val reportPrefix = "bug_report-"
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

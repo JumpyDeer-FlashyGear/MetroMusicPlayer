@@ -338,7 +338,8 @@ object MusicUtil : KoinComponent {
         contentResolver.delete(ContentUris.withAppendedId(artworkUri, albumId), null, null)
         val values = contentValuesOf(
             "album_id" to albumId,
-            "_data" to path
+            "_data" to path,
+            "mime_type" to "image/jpeg"
         )
         contentResolver.insert(artworkUri, values)
         contentResolver.notifyChange(artworkUri, null)
