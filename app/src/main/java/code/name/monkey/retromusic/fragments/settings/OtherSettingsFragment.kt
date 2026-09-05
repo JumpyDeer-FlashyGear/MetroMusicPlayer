@@ -113,8 +113,23 @@ class OtherSettingsFragment : AbsSettingsFragment() {
             .setMessage("This will overwrite your current data. The app will restart.")
             .setPositiveButton("Restore") { _, _ ->
                 lifecycleScope.launch {
+                    // Previously the Result here was discarded and restartApp() ran
+                    // unconditionally, so any import failure looked identical to success:
+                    // the app just restarted with unchanged data. Now a failure surfaces as a
+                    // Toast (matching the export button's existing onSuccess/onFailure pattern)
+                    // and the app is left running so the error is actually visible, instead of
+                    // being masked by an immediate restart.
                     backupManager.importBackup(file)
-                    restartApp()
+                        .onSuccess {
+                            restartApp()
+                        }
+                        .onFailure {
+                            Toast.makeText(
+                                requireContext(),
+                                "Restore failed: ${it.message}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                 }
             }
             .setNegativeButton("Cancel", null)
