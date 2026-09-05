@@ -75,6 +75,18 @@
     android:summary="Restore from a previous backup" />
 
     </code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreferenceCategory>
+    <code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreferenceCategory
+        android:layout="@layout/preference_category_title"
+        android:title="@string/pref_header_lyrics">
+
+        <EditTextPreference
+            android:key="genius_api_token"
+            android:layout="@layout/list_item_view"
+            android:summary="@string/pref_summary_genius_api_token"
+            android:title="@string/pref_title_genius_api_token"
+            app:icon="@drawable/ic_lyrics" />
+
+    </code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreferenceCategory>
     <code.name.monkey.appthemehelper.common.prefs.supportv7.ATEListPreference
         android:defaultValue="auto"
         android:entries="@array/pref_language_names"

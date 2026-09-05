@@ -39,6 +39,7 @@ import androidx.viewpager.widget.ViewPager
 import code.name.monkey.appthemehelper.util.VersionUtils
 import code.name.monkey.retromusic.EXTRA_ALBUM_ID
 import code.name.monkey.retromusic.EXTRA_ARTIST_ID
+import code.name.monkey.retromusic.AUTO_FETCH_ONLINE_LYRICS_ARG
 import code.name.monkey.retromusic.extensions.hide
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.activities.MainActivity
@@ -447,7 +448,7 @@ fun goToAlbum(activity: Activity) {
     }
 }
 
-fun goToLyrics(activity: Activity) {
+fun goToLyrics(activity: Activity, autoFetchOnlineLyrics: Boolean = false) {
     if (activity !is MainActivity) return
     activity.apply {
         //Hide Bottom Bar First, else Bottom Sheet doesn't collapse fully
@@ -458,7 +459,7 @@ fun goToLyrics(activity: Activity) {
 
         findNavController(R.id.fragment_container).navigate(
             R.id.lyrics_fragment,
-            null,
+            bundleOf(AUTO_FETCH_ONLINE_LYRICS_ARG to autoFetchOnlineLyrics),
             navOptions { launchSingleTop = true }
         )
     }

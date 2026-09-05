@@ -106,6 +106,9 @@ dependencies {
     def retrofit_version = '2.9.0'
     implementation "com.squareup.retrofit2:retrofit:$retrofit_version"
     implementation "com.squareup.retrofit2:converter-gson:$retrofit_version"
+    // For scraping lyrics text off Genius song pages - the Genius API itself never returns
+    // lyrics, only search metadata. See network/lyrics/GeniusScraper.kt.
+    implementation "org.jsoup:jsoup:1.17.2"
 
     def material_dialog_version = "3.3.0"
     implementation "com.afollestad.material-dialogs:core:$material_dialog_version"

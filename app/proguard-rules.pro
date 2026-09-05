@@ -29,8 +29,17 @@
 -dontwarn javax.annotation.**
 
 # RetroFit
+# Retrofit 2's real package is retrofit2.**, not retrofit.** - the rule below is a dead
+# leftover from Retrofit 1.x and matched nothing. Kept (harmless) alongside the correct one
+# rather than silently deleted, since removing a rule someone added on purpose deserves a
+# reason on record, not just disappearing.
 -dontwarn retrofit.**
 -keep class retrofit.** { *; }
+-dontwarn retrofit2.**
+-keep class retrofit2.** { *; }
+-keepattributes Exceptions
+-keep,allowobfuscation,allowshrinking interface retrofit2.Call
+-keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
 
 # Glide
 -keep public class * implements com.bumptech.glide.module.GlideModule
@@ -46,10 +55,28 @@
 }
 
 # OkHttp
+# com.squareup.okhttp3.** isn't a real package - OkHttp3 classes live directly under
+# okhttp3.**. Same situation as the Retrofit rule above: kept, but fixed alongside it.
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep interface com.squareup.okhttp3.** { *; }
 -dontwarn com.squareup.okhttp3.**
+-keep class okhttp3.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
+
+# Gson - needed for the lyrics network DTOs (network/lyrics/dto/**), most of which rely on
+# plain field-name matching rather than @SerializedName, so their field names must survive
+# R8's obfuscation or Gson silently fails to populate them (this was the actual bug behind
+# "works in debug, empty results in release").
+-keepattributes Signature
+-keep class com.google.gson.** { *; }
+-keep class * implements com.google.gson.TypeAdapterFactory
+-keep class * implements com.google.gson.JsonSerializer
+-keep class * implements com.google.gson.JsonDeserializer
+-keep class code.name.monkey.retromusic.network.lyrics.dto.** { *; }
+-keepclassmembers class code.name.monkey.retromusic.network.lyrics.dto.** { *; }
+-dontwarn org.jsoup.**
 
 #-dontwarn
 #-ignorewarnings

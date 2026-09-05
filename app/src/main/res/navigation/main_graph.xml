@@ -171,5 +171,10 @@
 
     <fragment
         android:id="@+id/lyrics_fragment"
-        android:name="code.name.monkey.retromusic.fragments.lyrics.LyricsFragment" />
+        android:name="code.name.monkey.retromusic.fragments.lyrics.LyricsFragment">
+        <argument
+            android:name="autoFetchOnlineLyrics"
+            android:defaultValue="false"
+            app:argType="boolean" />
+    </fragment>
 </navigation>

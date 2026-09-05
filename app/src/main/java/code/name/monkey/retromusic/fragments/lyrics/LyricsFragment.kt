@@ -21,11 +21,13 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.text.InputType
 import android.view.*
+import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
 import androidx.navigation.fragment.findNavController
+import androidx.navigation.fragment.navArgs
 import androidx.transition.Fade
 import code.name.monkey.appthemehelper.common.ATHToolbarActivity
 import code.name.monkey.appthemehelper.util.ToolbarContentTintHelper
@@ -43,12 +45,15 @@ import code.name.monkey.retromusic.helper.MusicProgressViewUpdateHelper
 import code.name.monkey.retromusic.lyrics.LrcView
 import code.name.monkey.retromusic.model.AudioTagInfo
 import code.name.monkey.retromusic.model.Song
+import code.name.monkey.retromusic.network.lyrics.OnlineLyricsRepository
 import code.name.monkey.retromusic.util.FileUtils
 import code.name.monkey.retromusic.util.LyricUtil
 import code.name.monkey.retromusic.util.UriUtil
 import com.afollestad.materialdialogs.input.input
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import java.io.File
@@ -62,6 +67,7 @@ class LyricsFragment : AbsMainActivityFragment(R.layout.fragment_lyrics),
     private var _binding: FragmentLyricsBinding? = null
     private val binding get() = _binding!!
     private lateinit var song: Song
+    private val args by navArgs<LyricsFragmentArgs>()
 
     private lateinit var normalLyricsLauncher: ActivityResultLauncher<IntentSenderRequest>
     private lateinit var editSyncedLyricsLauncher: ActivityResultLauncher<IntentSenderRequest>
@@ -117,6 +123,10 @@ class LyricsFragment : AbsMainActivityFragment(R.layout.fragment_lyrics),
         setupWakelock()
         setupViews()
         setupToolbar()
+
+        if (savedInstanceState == null && args.autoFetchOnlineLyrics) {
+            fetchOnlineLyrics()
+        }
     }
 
     private fun setupLyricsView() {
@@ -192,7 +202,49 @@ class LyricsFragment : AbsMainActivityFragment(R.layout.fragment_lyrics),
         if (item.itemId == R.id.action_search) {
             openUrl(googleSearchLrcUrl)
         }
+        if (item.itemId == R.id.action_fetch_lyrics) {
+            fetchOnlineLyrics()
+        }
         return false
+    }
+
+    /**
+     * Looks up lyrics online (LRCLIB, falling back to Genius) and, on a hit, opens the same
+     * edit dialog + save path a manually-pasted lyric goes through - [editSyncedLyrics] for a
+     * synced result, [editNormalLyrics] for a plain-text-only one - just pre-filled with the
+     * fetched text instead of blank. Nothing is written to the file/tag until the user taps
+     * Save on that dialog, exactly as with a manual paste.
+     */
+    private fun fetchOnlineLyrics() {
+        val song = song
+        Toast.makeText(requireContext(), getString(R.string.fetching_lyrics), Toast.LENGTH_SHORT)
+            .show()
+        GlobalScope.launch {
+            val result = try {
+                OnlineLyricsRepository.fetchLyrics(
+                    title = song.title,
+                    artist = song.artistName,
+                    album = song.albumName
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+
+            withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                when {
+                    result == null -> Toast.makeText(
+                        requireContext(),
+                        getString(R.string.no_lyrics_found_online),
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    result.syncedLyrics != null -> editSyncedLyrics(result.syncedLyrics)
+                    else -> editNormalLyrics(result.plainLyrics)
+                }
+            }
+        }
     }
 
     @SuppressLint("CheckResult")

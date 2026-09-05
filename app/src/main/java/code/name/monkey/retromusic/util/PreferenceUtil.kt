@@ -100,6 +100,19 @@ object PreferenceUtil {
             putString(LANGUAGE_NAME, value)
         }
 
+    /**
+     * User-supplied Genius API client access token (see genius.com/api-clients), used only as
+     * a fallback lyrics source when LRCLIB has nothing. Blank/unset means the Genius fallback
+     * is simply skipped - deliberately per-user rather than a token shipped with the app, so
+     * one person's usage/rate-limit/revocation never affects anyone else. See
+     * network/lyrics/OnlineLyricsRepository.kt.
+     */
+    var geniusApiToken: String
+        get() = sharedPreferences.getString(GENIUS_API_TOKEN_KEY, "") ?: ""
+        set(value) = sharedPreferences.edit {
+            putString(GENIUS_API_TOKEN_KEY, value)
+        }
+
     var isLocaleAutoStorageEnabled: Boolean
         get() = sharedPreferences.getBoolean(
             LOCALE_AUTO_STORE_ENABLED,
