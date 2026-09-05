@@ -29,9 +29,11 @@ import org.koin.androidx.viewmodel.ext.android.viewModel
 
 /**
  * Statistics screen (see CLAUDE.md, Component 2; redesigned in Component 6's pivot away
- * from charts). No genre legend row, no pie/bar chart toggle, no time window anymore -- just
- * a ranked "Top genres" list against [StatisticsViewModel], which is backed by real
- * per-genre playtime as of Component 7 (see that class's doc comment).
+ * from charts). No genre legend row, no pie/bar chart toggle, no time window anymore --
+ * just a library-overview block (Total Playtime, Songs, Albums, Artists), the
+ * Artists/Albums entry-point buttons, and a ranked "Top genres" list below that, all against
+ * [StatisticsViewModel], which is backed by real per-song/per-genre playtime as of
+ * Component 7 (see that class's doc comment).
  */
 class StatisticsFragment : Fragment() {
 
@@ -71,8 +73,12 @@ class StatisticsFragment : Fragment() {
     }
 
     private fun observeViewModel() {
-        viewModel.totalPlaytimeMillis.observe(viewLifecycleOwner) { totalMillis ->
-            binding.totalPlaytimeText.text = MusicUtil.getReadableDurationString(totalMillis)
+        viewModel.overviewStats.observe(viewLifecycleOwner) { overview ->
+            binding.overviewTotalPlaytimeText.text =
+                MusicUtil.getReadableDurationString(overview.totalPlaytimeMillis)
+            binding.overviewSongsText.text = overview.songCount.toString()
+            binding.overviewAlbumsText.text = overview.albumCount.toString()
+            binding.overviewArtistsText.text = overview.artistCount.toString()
         }
         viewModel.displayGenreStats.observe(viewLifecycleOwner) { stats ->
             binding.genreListContainer.removeAllViews()
