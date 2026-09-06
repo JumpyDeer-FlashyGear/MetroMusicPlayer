@@ -252,14 +252,14 @@ class LibraryViewModel(
     }
 
     fun playCountSongs(): LiveData<List<Song>> = liveData(IO) {
-        repository.playCountSongs().forEach { song ->
+        val playCountEntities = repository.playCountSongs()
+        emit(playCountEntities.map { it.toSong() })
+
+        playCountEntities.forEach { song ->
             if (!File(song.data).exists() || song.id == -1L) {
                 repository.deleteSongInPlayCount(song)
             }
         }
-        emit(repository.playCountSongs().map {
-            it.toSong()
-        })
     }
 
     fun artists(type: Int): LiveData<List<Artist>> = liveData(IO) {
