@@ -184,6 +184,60 @@
                 android:textAppearance="@style/TextViewHeadline6"
                 android:textStyle="bold" />
 
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:overScrollMode="@integer/overScrollMode"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/statsTimeRangeChipGroup"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleLine="true"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/statsTimeRangeChipToday"
+                        style="@style/StatsTimeRangeChipStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/stats_time_range_today" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/statsTimeRangeChipWeek"
+                        style="@style/StatsTimeRangeChipStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:text="@string/stats_time_range_week" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/statsTimeRangeChipMonth"
+                        style="@style/StatsTimeRangeChipStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/stats_time_range_month" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/statsTimeRangeChipYear"
+                        style="@style/StatsTimeRangeChipStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/stats_time_range_year" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/statsTimeRangeChipCustom"
+                        style="@style/StatsTimeRangeChipStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/stats_time_range_custom" />
+
+                </com.google.android.material.chip.ChipGroup>
+
+            </HorizontalScrollView>
+
             <LinearLayout
                 android:id="@+id/genreListContainer"
                 android:layout_width="match_parent"

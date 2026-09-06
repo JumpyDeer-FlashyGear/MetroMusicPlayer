@@ -513,6 +513,12 @@
     <string name="stats_view_album">View Album</string>
     <string name="stats_view_artist">View Artist</string>
     <string name="stats_view_stats">View Stats</string>
+    <string name="stats_time_range_today">Today</string>
+    <string name="stats_time_range_week">Week</string>
+    <string name="stats_time_range_month">Month</string>
+    <string name="stats_time_range_year">Year</string>
+    <string name="stats_time_range_custom">Custom</string>
+    <string name="stats_time_range_custom_picker_title">Select range</string>
     <string name="simple">Simple</string>
     <string name="sleep_timer_canceled">Sleep timer canceled.</string>
     <string name="sleep_timer_set">Sleep timer set for %d minutes from now.</string>

@@ -7,6 +7,7 @@ import androidx.lifecycle.map
 import androidx.lifecycle.viewModelScope
 import code.name.monkey.retromusic.model.stats.GenreStat
 import code.name.monkey.retromusic.model.stats.LibraryOverviewStat
+import code.name.monkey.retromusic.model.stats.StatsTimeRange
 import code.name.monkey.retromusic.repository.RealRepository
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -20,16 +21,19 @@ import kotlinx.coroutines.launch
  * [code.name.monkey.retromusic.fragments.genres.GenreDetailsViewModel] resolves it for the
  * Genre Detail screen -- [RealRepository.fetchGenres] for the genre list,
  * [RealRepository.getGenre] per genre for that genre's songs (a live MediaStore query, since
- * genre membership isn't stored in Room -- see CLAUDE.md "Schema reality check"). Playtime is
- * resolved the same way the Genre/Artist/Album detail screens and the "most played" screen
- * already resolve it: [RealRepository.playCountSongs], the real per-song
- * `PlayCountEntity.playTime` column that the playback service
- * (`SongPlayCountHelper`/`MusicService.saveSongPlayTime`) already keeps up to date. No new
- * schema, DAO, or playback hook was needed for this -- it already existed in this repo (see
- * CLAUDE.md's Component 7 update).
+ * genre membership isn't stored in Room -- see CLAUDE.md "Schema reality check"). Per-genre
+ * playtime for the selected range comes from [RealRepository.playTimeInRange], the daily
+ * rollup table fed by the same playback hook (`SongPlayCountHelper`/
+ * `MusicService.saveSongPlayTime`) that already keeps `PlayCountEntity.playTime`'s all-time
+ * total up to date -- see CLAUDE.md's Component 7 follow-up. [overviewStats]' Total Playtime
+ * still reads that all-time total directly via [RealRepository.playCountSongs], unaffected by
+ * [selectedTimeRange].
  *
- * Time windows have been removed entirely from every Statistics screen (see CLAUDE.md,
- * Component 6), so this always reflects All Time.
+ * Time windows were removed entirely from every Statistics screen by Component 6, then
+ * reintroduced on this screen only once real per-day playtime existed to back it (see
+ * CLAUDE.md, Component 7 follow-up): [selectedTimeRange] drives [displayGenreStats] via
+ * [RealRepository.playTimeInRange]. There is deliberately no "All Time" choice in the picker
+ * -- [overviewStats]' Total Playtime figure covers that, unaffected by this picker.
  */
 class StatisticsViewModel(private val realRepository: RealRepository) : ViewModel() {
 
@@ -37,11 +41,14 @@ class StatisticsViewModel(private val realRepository: RealRepository) : ViewMode
 
     /**
      * [_genreStats], filtered to genres with more than [MIN_DISPLAY_MILLIS] of playtime,
-     * sorted descending by playtime, and capped at [MAX_DISPLAYED_GENRES]. Every genre that
-     * doesn't individually qualify for its own row -- whether because it falls under the
-     * 2-hour floor or just past the top-9 cap -- is folded into a single "Others" entry,
-     * which is only appended if there's anything left to fold in. At most 9 genres get their
-     * own row plus one "Others" row (10 total) -- see [MAX_DISPLAYED_GENRES]/[MIN_DISPLAY_MILLIS].
+     * sorted descending by playtime, and capped at [MAX_DISPLAYED_GENRES]. The floor is
+     * deliberately tiny (1 second, not the old 2-hour minimum) -- just enough to keep a
+     * genre with literally zero/negligible playtime from getting its own row, without
+     * hiding anything a person could actually call "listened to". Every genre that doesn't
+     * individually qualify for its own row -- whether because it falls under that floor or
+     * just past the top-9 cap -- is folded into a single "Others" entry, which is only
+     * appended if there's anything left to fold in. At most 9 genres get their own row plus
+     * one "Others" row (10 total) -- see [MAX_DISPLAYED_GENRES]/[MIN_DISPLAY_MILLIS].
      */
     val displayGenreStats: LiveData<List<GenreStat>> = _genreStats.map { stats ->
         val sorted = stats.sortedByDescending { it.playedMillis }
@@ -60,24 +67,44 @@ class StatisticsViewModel(private val realRepository: RealRepository) : ViewMode
     /**
      * Library-wide totals for the overview block at the top of the screen (Total Playtime,
      * Songs, Albums, Artists) -- see CLAUDE.md. This replaced the old header row that paired
-     * "Top genres" with the grand total playtime; that total now lives here instead.
+     * "Top genres" with the grand total playtime; that total now lives here instead. Always
+     * All Time, unaffected by [selectedTimeRange].
      */
     val overviewStats: LiveData<LibraryOverviewStat> = _overviewStats
 
+    private val _selectedTimeRange = MutableLiveData<StatsTimeRange>(DEFAULT_TIME_RANGE)
+
+    /** Drives [displayGenreStats]; the Statistics screen syncs its time-picker chips to this. */
+    val selectedTimeRange: LiveData<StatsTimeRange> = _selectedTimeRange
+
+    // Guards against a slow-loading older range's result overwriting a newer selection's --
+    // e.g. tapping Month then quickly tapping Week shouldn't let Month's result land second.
+    private var genreStatsRequestId = 0
+
     init {
-        loadGenreStats()
+        loadGenreStats(DEFAULT_TIME_RANGE)
         loadOverviewStats()
     }
 
-    private fun loadGenreStats() = viewModelScope.launch(IO) {
-        val genres = realRepository.fetchGenres()
-        val playTimeBySongId = realRepository.playCountSongs().associate { it.id to it.playTime }
-        val stats = genres.map { genre ->
-            val playedMillis = realRepository.getGenre(genre.id)
-                .sumOf { song -> playTimeBySongId[song.id] ?: 0L }
-            GenreStat(id = genre.id, name = genre.name, playedMillis = playedMillis)
+    fun selectTimeRange(range: StatsTimeRange) {
+        _selectedTimeRange.value = range
+        loadGenreStats(range)
+    }
+
+    private fun loadGenreStats(range: StatsTimeRange) {
+        val requestId = ++genreStatsRequestId
+        viewModelScope.launch(IO) {
+            val genres = realRepository.fetchGenres()
+            val playTimeBySongId = realRepository.playTimeInRange(range.startEpochDay, range.endEpochDay)
+            val stats = genres.map { genre ->
+                val playedMillis = realRepository.getGenre(genre.id)
+                    .sumOf { song -> playTimeBySongId[song.id] ?: 0L }
+                GenreStat(id = genre.id, name = genre.name, playedMillis = playedMillis)
+            }
+            if (requestId == genreStatsRequestId) {
+                _genreStats.postValue(stats)
+            }
         }
-        _genreStats.postValue(stats)
     }
 
     /**
@@ -108,10 +135,18 @@ class StatisticsViewModel(private val realRepository: RealRepository) : ViewMode
         /** Sentinel id for the synthetic "Others" bucket in [displayGenreStats]. */
         const val OTHERS_ID = -1L
 
+        /**
+         * Picker default on first opening the screen. Not specified in the brief (which only
+         * fixed the five available choices); Week was picked as the most useful "at a glance"
+         * default -- Today is often too sparse for a meaningful genre breakdown, Month/Year
+         * dilute recent listening. Revisit if that assumption doesn't match actual usage.
+         */
+        private val DEFAULT_TIME_RANGE: StatsTimeRange = StatsTimeRange.Week
+
         /** At most this many individual genres are shown before the rest collapse into "Others" -- confirmed at 9, see CLAUDE.md. */
         private const val MAX_DISPLAYED_GENRES = 9
 
-        /** A genre only gets its own row if it has more than this much playtime -- lowered from 3 hours to 2 hours per follow-up request. */
-        private const val MIN_DISPLAY_MILLIS = 2 * 60 * 60 * 1000L
+        /** A genre only gets its own row if it has more than this much playtime -- set to 1 second, down from the old 2-hour floor, per follow-up request. */
+        private const val MIN_DISPLAY_MILLIS = 1000L
     }
 }

@@ -22,18 +22,23 @@ import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.databinding.FragmentStatisticsBinding
+import code.name.monkey.retromusic.db.DailyPlayCountEntity
 import code.name.monkey.retromusic.extensions.applyToolbar
+import code.name.monkey.retromusic.model.stats.StatsTimeRange
 import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.stats.StatsRowBinder
+import com.google.android.material.datepicker.MaterialDatePicker
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
 /**
  * Statistics screen (see CLAUDE.md, Component 2; redesigned in Component 6's pivot away
- * from charts). No genre legend row, no pie/bar chart toggle, no time window anymore --
- * just a library-overview block (Total Playtime, Songs, Albums, Artists), the
- * Artists/Albums entry-point buttons, and a ranked "Top genres" list below that, all against
- * [StatisticsViewModel], which is backed by real per-song/per-genre playtime as of
- * Component 7 (see that class's doc comment).
+ * from charts). No genre legend row, no pie/bar chart toggle anymore -- just a
+ * library-overview block (Total Playtime, Songs, Albums, Artists), the Artists/Albums
+ * entry-point buttons, a small time-range chip row (Today/Week/Month/Year/Custom), and a
+ * ranked "Top genres" list below that scoped to whichever range is selected, all against
+ * [StatisticsViewModel]. The time-range chips were reintroduced on top of Component 6's
+ * plain-list redesign once real per-day playtime existed to back them -- see CLAUDE.md's
+ * Component 7 follow-up.
  */
 class StatisticsFragment : Fragment() {
 
@@ -59,6 +64,7 @@ class StatisticsFragment : Fragment() {
         }
 
         setupComponent3Buttons()
+        setupTimeRangeChips()
         observeViewModel()
 
     }
@@ -72,7 +78,68 @@ class StatisticsFragment : Fragment() {
         }
     }
 
+    // Plain per-chip click listeners rather than ChipGroup's checked-state-change callback:
+    // the Custom chip must always reopen the date-range picker when tapped, even when it's
+    // already the checked chip (e.g. to pick a different range) -- a checked-state listener
+    // wouldn't fire in that case, since tapping an already-checked chip in a singleSelection
+    // group doesn't change what's checked.
+    private fun setupTimeRangeChips() {
+        binding.statsTimeRangeChipToday.setOnClickListener {
+            viewModel.selectTimeRange(StatsTimeRange.Today)
+        }
+        binding.statsTimeRangeChipWeek.setOnClickListener {
+            viewModel.selectTimeRange(StatsTimeRange.Week)
+        }
+        binding.statsTimeRangeChipMonth.setOnClickListener {
+            viewModel.selectTimeRange(StatsTimeRange.Month)
+        }
+        binding.statsTimeRangeChipYear.setOnClickListener {
+            viewModel.selectTimeRange(StatsTimeRange.Year)
+        }
+        binding.statsTimeRangeChipCustom.setOnClickListener {
+            showCustomRangePicker()
+        }
+    }
+
+    private fun showCustomRangePicker() {
+        val picker = MaterialDatePicker.Builder.dateRangePicker()
+            .setTitleText(R.string.stats_time_range_custom_picker_title)
+            .build()
+        picker.addOnPositiveButtonClickListener { selection ->
+            viewModel.selectTimeRange(
+                StatsTimeRange.Custom(
+                    startEpochDay = DailyPlayCountEntity.epochDayFromUtcMidnightMillis(selection.first),
+                    endEpochDay = DailyPlayCountEntity.epochDayFromUtcMidnightMillis(selection.second)
+                )
+            )
+        }
+        // Cancelling/dismissing leaves the ViewModel's range unchanged, so LiveData won't
+        // re-emit on its own -- explicitly re-sync the chip row back to whatever's still
+        // actually selected, undoing the ChipGroup's own auto-check of the Custom chip.
+        picker.addOnNegativeButtonClickListener { syncSelectedChip() }
+        picker.addOnCancelListener { syncSelectedChip() }
+        picker.show(childFragmentManager, "stats_time_range_custom_picker")
+    }
+
+    private fun syncSelectedChip() {
+        viewModel.selectedTimeRange.value?.let { updateSelectedChip(it) }
+    }
+
+    private fun updateSelectedChip(range: StatsTimeRange) {
+        val chipId = when (range) {
+            is StatsTimeRange.Today -> binding.statsTimeRangeChipToday.id
+            is StatsTimeRange.Week -> binding.statsTimeRangeChipWeek.id
+            is StatsTimeRange.Month -> binding.statsTimeRangeChipMonth.id
+            is StatsTimeRange.Year -> binding.statsTimeRangeChipYear.id
+            is StatsTimeRange.Custom -> binding.statsTimeRangeChipCustom.id
+        }
+        binding.statsTimeRangeChipGroup.check(chipId)
+    }
+
     private fun observeViewModel() {
+        viewModel.selectedTimeRange.observe(viewLifecycleOwner) { range ->
+            updateSelectedChip(range)
+        }
         viewModel.overviewStats.observe(viewLifecycleOwner) { overview ->
             binding.overviewTotalPlaytimeText.text =
                 MusicUtil.getReadableDurationString(overview.totalPlaytimeMillis)

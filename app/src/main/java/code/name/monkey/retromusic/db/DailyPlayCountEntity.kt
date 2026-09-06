@@ -49,5 +49,14 @@ data class DailyPlayCountEntity(
             val offsetMillis = TimeZone.getDefault().getOffset(now)
             return (now + offsetMillis) / DAY_MILLIS
         }
+
+        /**
+         * Converts a UTC-midnight millisecond timestamp — the format
+         * `MaterialDatePicker`'s date-range selections come back in — to the
+         * same day-epoch index [todayEpochDay] uses. Exact, and needs no
+         * timezone adjustment unlike [todayEpochDay]: a UTC-midnight
+         * timestamp is by definition already a whole multiple of a day.
+         */
+        fun epochDayFromUtcMidnightMillis(utcMillis: Long): Long = utcMillis / DAY_MILLIS
     }
 }

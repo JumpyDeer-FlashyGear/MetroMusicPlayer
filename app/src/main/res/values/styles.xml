@@ -198,6 +198,18 @@
         <item name="chipMinHeight">40dp</item>
         <item name="chipStartPadding">10dp</item>
     </style>
+    <!-- Deliberately smaller than SearchChipStyle: the Statistics screen's time-range
+         picker (Today/Week/Month/Year/Custom) needs to stay out of the way of the ranked
+         genre list below it. -->
+    <style name="StatsTimeRangeChipStyle" parent="Widget.Material3.Chip.Filter">
+        <item name="android:checked">false</item>
+        <item name="android:textSize">11sp</item>
+        <item name="checkedIconVisible">false</item>
+        <item name="chipEndPadding">6dp</item>
+        <item name="chipStartPadding">6dp</item>
+        <item name="chipMinHeight">28dp</item>
+        <item name="android:minHeight">0dp</item>
+    </style>
     <!-- 3-tier text sizing for the Statistics screens' ranked lists (Top genres/Top
          albums/Top songs see CLAUDE.md, Component 6): rank 1 big, ranks 2-3 medium,
          rank 4+ small and uniform for the rest. Applied programmatically by
