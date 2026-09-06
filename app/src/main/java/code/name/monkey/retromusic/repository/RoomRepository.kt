@@ -38,6 +38,8 @@ interface RoomRepository {
     suspend fun clearSongHistory()
     suspend fun findSongExistInPlayCount(songId: Long): PlayCountEntity?
     suspend fun playCountSongs(): List<PlayCountEntity>
+    suspend fun addDailyPlayedMillis(songId: Long, dayEpoch: Long, millis: Long)
+    suspend fun playTimeInRange(startEpochDay: Long, endEpochDay: Long): Map<Long, Long>
     suspend fun deleteSongs(songs: List<Song>)
     suspend fun isSongFavorite(context: Context, songId: Long): Boolean
     fun checkPlaylistExists(playListId: Long): LiveData<Boolean>
@@ -47,7 +49,8 @@ interface RoomRepository {
 class RealRoomRepository(
     private val playlistDao: PlaylistDao,
     private val playCountDao: PlayCountDao,
-    private val historyDao: HistoryDao
+    private val historyDao: HistoryDao,
+    private val dailyPlayCountDao: DailyPlayCountDao
 ) : RoomRepository {
     @WorkerThread
     override suspend fun createPlaylist(playlistEntity: PlaylistEntity): Long =
@@ -165,6 +168,13 @@ class RealRoomRepository(
 
     override suspend fun playCountSongs(): List<PlayCountEntity> =
         playCountDao.playCountSongs()
+
+    override suspend fun addDailyPlayedMillis(songId: Long, dayEpoch: Long, millis: Long) =
+        dailyPlayCountDao.addPlayedMillis(songId, dayEpoch, millis)
+
+    override suspend fun playTimeInRange(startEpochDay: Long, endEpochDay: Long): Map<Long, Long> =
+        dailyPlayCountDao.songTotalsBetween(startEpochDay, endEpochDay)
+            .associate { it.songId to it.totalMillis }
 
     override suspend fun deleteSongs(songs: List<Song>) = songs.forEach {
         playCountDao.deleteSong(it.id)

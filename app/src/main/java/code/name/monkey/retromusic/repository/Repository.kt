@@ -80,6 +80,8 @@ interface Repository {
     suspend fun findSongExistInPlayCount(songId: Long): PlayCountEntity?
     suspend fun playCountSongs(): List<PlayCountEntity>
     suspend fun songsWithPlayTime(songs: List<Song>): List<Song>
+    suspend fun addDailyPlayedMillis(songId: Long, dayEpoch: Long, millis: Long)
+    suspend fun playTimeInRange(startEpochDay: Long, endEpochDay: Long): Map<Long, Long>
     suspend fun deleteSongs(songs: List<Song>)
     suspend fun searchArtists(query: String): List<Artist>
     suspend fun searchSongs(query: String): List<Song>
@@ -249,6 +251,12 @@ class RealRepository(
 
     override suspend fun playCountSongs(): List<PlayCountEntity> =
         roomRepository.playCountSongs()
+
+    override suspend fun addDailyPlayedMillis(songId: Long, dayEpoch: Long, millis: Long) =
+        roomRepository.addDailyPlayedMillis(songId, dayEpoch, millis)
+
+    override suspend fun playTimeInRange(startEpochDay: Long, endEpochDay: Long): Map<Long, Long> =
+        roomRepository.playTimeInRange(startEpochDay, endEpochDay)
 
     override suspend fun songsWithPlayTime(songs: List<Song>): List<Song> {
     val statsById = playCountSongs().associateBy { it.id }

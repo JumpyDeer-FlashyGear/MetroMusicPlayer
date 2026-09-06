@@ -65,6 +65,7 @@ import code.name.monkey.retromusic.model.smartplaylist.AbsSmartPlaylist
 import code.name.monkey.retromusic.providers.HistoryStore
 import code.name.monkey.retromusic.providers.MusicPlaybackQueueStore
 import code.name.monkey.retromusic.providers.SongPlayCountStore
+import code.name.monkey.retromusic.db.DailyPlayCountEntity
 import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.service.notification.PlayingNotification
 import code.name.monkey.retromusic.service.notification.PlayingNotificationClassic
@@ -333,6 +334,13 @@ class MusicService : MediaBrowserServiceCompat(),
             repository.findSongExistInPlayCount(previousSongId)?.let { previous ->
                 previous.playTime += songElapsedMillis
                 repository.upsertSongInPlayCount(previous)
+            }
+            if (songElapsedMillis > 0) {
+                repository.addDailyPlayedMillis(
+                    previousSongId,
+                    DailyPlayCountEntity.todayEpochDay(),
+                    songElapsedMillis
+                )
             }
         }
         // Log.d("PlayTimeDebug", "saveSongPlayTime added Millis=$songElapsedMillis")
