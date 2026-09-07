@@ -1,8 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Statistics "Artists"/"Albums" list (see CLAUDE.md, Component 3; time window removed in
-     Component 6). Based on fragment_playlist_detail.xml (same toolbar/recyclerView/
-     empty-state ids, so the visual style matches every other artist/album grid in the app).
-     Always shows All-Time playtime now no time-window control on this screen. -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -26,6 +22,63 @@
             app:layout_scrollFlags="scroll|enterAlways"
             app:navigationIcon="@drawable/ic_arrow_back"
             app:titleTextAppearance="@style/ToolbarTextAppearanceNormal" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="12dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="8dp"
+            android:overScrollMode="@integer/overScrollMode"
+            android:scrollbars="none">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/statsTimeRangeChipGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:singleLine="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/statsTimeRangeChipToday"
+                    style="@style/StatsTimeRangeChipStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/stats_time_range_today" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/statsTimeRangeChipWeek"
+                    style="@style/StatsTimeRangeChipStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="@string/stats_time_range_week" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/statsTimeRangeChipMonth"
+                    style="@style/StatsTimeRangeChipStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/stats_time_range_month" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/statsTimeRangeChipYear"
+                    style="@style/StatsTimeRangeChipStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/stats_time_range_year" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/statsTimeRangeChipCustom"
+                    style="@style/StatsTimeRangeChipStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/stats_time_range_custom" />
+
+            </com.google.android.material.chip.ChipGroup>
+
+        </HorizontalScrollView>
     </com.google.android.material.appbar.AppBarLayout>
 
     <code.name.monkey.retromusic.views.insets.InsetsRecyclerView

@@ -28,11 +28,14 @@ import androidx.recyclerview.widget.GridLayoutManager
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.adapter.album.StatsAlbumAdapter
 import code.name.monkey.retromusic.databinding.FragmentStatsMediaListBinding
+import code.name.monkey.retromusic.db.DailyPlayCountEntity
 import code.name.monkey.retromusic.fragments.base.AbsMainActivityFragment
 import code.name.monkey.retromusic.interfaces.IAlbumClickListener
 import code.name.monkey.retromusic.model.Album
+import code.name.monkey.retromusic.model.stats.StatsTimeRange
 import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.util.RetroUtil
+import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.shape.MaterialShapeDrawable
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -48,14 +51,14 @@ import org.koin.android.ext.android.get
  * `AlbumAdapter`, `ArtistsFragment`/`AlbumsFragment`, etc.) rather than genericizing over
  * the item type, so this follows the same convention.
  *
- * Time window has been removed entirely (see CLAUDE.md, Component 6) -- this screen always
- * shows All-Time playtime now, so there's no per-screen time-window ViewModel or
- * time-window button here anymore (the old `StatsTimeWindowViewModel` is deleted).
+ * Time window was removed entirely (see CLAUDE.md, Component 6), then reintroduced on this
+ * screen once real per-day playtime existed to back it -- see [StatsArtistsFragment]'s doc
+ * comment for the pattern this mirrors (same picker, same request-id guard, same reasoning).
  *
  * Phase B (Component 7): both the album list and the playtime used to sort/label it are
  * real now -- see [StatsArtistsFragment]'s doc comment for the pattern this mirrors
- * (per-album playtime summed from [Album.songs]' real `PlayCountEntity.playTime`, one
- * playtime query for the whole list).
+ * (per-album playtime for the selected range summed from [Album.songs]' real daily-rollup
+ * playtime via [RealRepository.playTimeInRange], one playtime query for the whole list).
  */
 class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_media_list),
     IAlbumClickListener {
@@ -64,6 +67,12 @@ class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_medi
     private val binding get() = _binding!!
     private var latestAlbums: List<Album> = emptyList()
     private lateinit var adapter: StatsAlbumAdapter
+
+    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.Week
+
+    // Guards against a slow-loading older range's result overwriting a newer selection's --
+    // same reasoning as StatisticsViewModel's genreStatsRequestId.
+    private var renderRequestId = 0
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -80,20 +89,71 @@ class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_medi
         binding.recyclerView.adapter = adapter
         binding.recyclerView.layoutManager = GridLayoutManager(requireContext(), gridCount())
 
+        setupTimeRangeChips()
+
         libraryViewModel.getAlbums().observe(viewLifecycleOwner) { albums ->
             latestAlbums = albums
             render()
         }
     }
 
+    // Plain per-chip click listeners rather than ChipGroup's checked-state-change callback --
+    // see StatisticsFragment's setupTimeRangeChips for why the Custom chip needs this.
+    private fun setupTimeRangeChips() {
+        binding.statsTimeRangeChipToday.setOnClickListener { selectTimeRange(StatsTimeRange.Today) }
+        binding.statsTimeRangeChipWeek.setOnClickListener { selectTimeRange(StatsTimeRange.Week) }
+        binding.statsTimeRangeChipMonth.setOnClickListener { selectTimeRange(StatsTimeRange.Month) }
+        binding.statsTimeRangeChipYear.setOnClickListener { selectTimeRange(StatsTimeRange.Year) }
+        binding.statsTimeRangeChipCustom.setOnClickListener { showCustomRangePicker() }
+    }
+
+    private fun selectTimeRange(range: StatsTimeRange) {
+        selectedTimeRange = range
+        updateSelectedChip(range)
+        render()
+    }
+
+    private fun showCustomRangePicker() {
+        val picker = MaterialDatePicker.Builder.dateRangePicker()
+            .setTitleText(R.string.stats_time_range_custom_picker_title)
+            .build()
+        picker.addOnPositiveButtonClickListener { selection ->
+            selectTimeRange(
+                StatsTimeRange.Custom(
+                    startEpochDay = DailyPlayCountEntity.epochDayFromUtcMidnightMillis(selection.first),
+                    endEpochDay = DailyPlayCountEntity.epochDayFromUtcMidnightMillis(selection.second)
+                )
+            )
+        }
+        // Cancelling/dismissing leaves selectedTimeRange unchanged -- explicitly re-sync the
+        // chip row, undoing the ChipGroup's own auto-check of the Custom chip.
+        picker.addOnNegativeButtonClickListener { updateSelectedChip(selectedTimeRange) }
+        picker.addOnCancelListener { updateSelectedChip(selectedTimeRange) }
+        picker.show(childFragmentManager, "stats_time_range_custom_picker")
+    }
+
+    private fun updateSelectedChip(range: StatsTimeRange) {
+        val chipId = when (range) {
+            is StatsTimeRange.Today -> binding.statsTimeRangeChipToday.id
+            is StatsTimeRange.Week -> binding.statsTimeRangeChipWeek.id
+            is StatsTimeRange.Month -> binding.statsTimeRangeChipMonth.id
+            is StatsTimeRange.Year -> binding.statsTimeRangeChipYear.id
+            is StatsTimeRange.Custom -> binding.statsTimeRangeChipCustom.id
+        }
+        binding.statsTimeRangeChipGroup.check(chipId)
+    }
+
     private fun render() {
+        val requestId = ++renderRequestId
+        val range = selectedTimeRange
         lifecycleScope.launch {
             val playtimeByAlbumId = withContext(IO) {
-                val playTimeBySongId = get<RealRepository>().playCountSongs().associate { it.id to it.playTime }
+                val playTimeBySongId = get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
                 latestAlbums.associate { album ->
                     album.id to album.songs.sumOf { song -> playTimeBySongId[song.id] ?: 0L }
                 }
             }
+            if (requestId != renderRequestId) return@launch
             val sorted = latestAlbums.sortedByDescending { playtimeByAlbumId.getValue(it.id) }
             adapter.playtimeMillisByAlbumId = playtimeByAlbumId
             adapter.swapDataSet(sorted)

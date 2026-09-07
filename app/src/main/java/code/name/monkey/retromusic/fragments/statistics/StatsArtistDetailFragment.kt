@@ -28,15 +28,17 @@ import code.name.monkey.retromusic.EXTRA_ARTIST_ID
 import code.name.monkey.retromusic.EXTRA_ARTIST_NAME
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.databinding.FragmentStatsArtistDetailBinding
+import code.name.monkey.retromusic.db.DailyPlayCountEntity
 import code.name.monkey.retromusic.fragments.base.AbsMainActivityFragment
 import code.name.monkey.retromusic.model.Artist
-import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.model.stats.AlbumStat
 import code.name.monkey.retromusic.model.stats.SongStat
+import code.name.monkey.retromusic.model.stats.StatsTimeRange
 import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.PreferenceUtil
 import code.name.monkey.retromusic.util.stats.StatsRowBinder
+import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.shape.MaterialShapeDrawable
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -46,27 +48,30 @@ import org.koin.android.ext.android.get
  * Artist detail stats screen (see CLAUDE.md, Component 4; redesigned in Component 6's pivot
  * away from charts). Opened by tapping an artist in Component 3's `StatsArtistsFragment`.
  *
- * No charts, no time window anymore -- just three plain sections, all real data rendered as
+ * No charts anymore -- a time-range chip row (Today/Week/Month/Year/Custom, same idiom as
+ * Component 3's Artists/Albums list screens), then three plain sections, all rendered as
  * ranked text lists via [StatsRowBinder]:
- * - **Overview**: Total Playtime (real, sum of [Artist.songs]' real playtime), Discography
- *   length (real -- sum of every song's actual [code.name.monkey.retromusic.model.Song.duration]
- *   via `artist.songs`), Albums ([Artist.albumCount]), Songs ([Artist.songCount]).
+ * - **Overview**: Total Playtime (real, scoped to [selectedTimeRange]), Discography length
+ *   (real, library-wide -- sum of every song's actual
+ *   [code.name.monkey.retromusic.model.Song.duration] via `artist.songs`, unaffected by the
+ *   picker), Albums ([Artist.albumCount]), Songs ([Artist.songCount]) (both library-wide
+ *   counts, also unaffected by the picker).
  * - **Top Albums**: every album by this artist ([Artist.albums], uncapped), ranked
- *   descending by real playtime (summed from that album's songs).
- * - **Top Songs**: every song by this artist ([Artist.songs]), ranked descending by real
- *   playtime, capped at [MAX_TOP_SONGS].
+ *   descending by playtime within [selectedTimeRange] (summed from that album's songs).
+ * - **Top Songs**: every song by this artist ([Artist.songs]), ranked descending by playtime
+ *   within [selectedTimeRange], capped at [MAX_TOP_SONGS].
  *
  * Both ranked lists use the same 3-tier sizing as the main screen's Top Genres list (rank 1
  * big, ranks 2-3 medium, rank 4+ small) -- confirmed for every ranked list on these screens,
  * see CLAUDE.md.
  *
- * Phase B (Component 7): playtime is real now, resolved the same way this screen's own
- * Overview total-playtime field, the Genre Detail screen, and the "most played" screen all
- * resolve it -- [RealRepository.songsWithPlayTime] decorates [Artist.songs] with each
- * song's real `PlayCountEntity.playTime` in one query; Top Albums sums that per album,
- * Top Songs reads it per song directly. The artist itself is real, found by id in
- * [libraryViewModel]'s artist list -- same lookup-by-id pattern Component 3 used for album
- * taps.
+ * Phase B (Component 7) + time-range picker follow-up: playtime for the selected range comes
+ * from [RealRepository.playTimeInRange], the same daily-rollup source the Statistics screen
+ * and the Artists/Albums list screens use -- see those classes' doc comments for the pattern
+ * this mirrors (same picker, same request-id guard). Discography length/Albums/Songs stay
+ * on the library-wide sources they always used, since those are facts about the library, not
+ * about listening activity. The artist itself is real, found by id in [libraryViewModel]'s
+ * artist list -- same lookup-by-id pattern Component 3 used for album taps.
  */
 class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats_artist_detail) {
 
@@ -74,6 +79,12 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
     private val binding get() = _binding!!
     private val args by navArgs<StatsArtistDetailFragmentArgs>()
     private var currentArtist: Artist? = null
+
+    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.Week
+
+    // Guards against a slow-loading older range's result overwriting a newer selection's --
+    // same reasoning as StatisticsViewModel's genreStatsRequestId.
+    private var renderRequestId = 0
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -85,28 +96,79 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
         binding.appBarLayout.statusBarForeground =
             MaterialShapeDrawable.createWithElevationOverlay(requireContext())
 
+        setupTimeRangeChips()
+
         libraryViewModel.getArtists().observe(viewLifecycleOwner) { artists ->
             currentArtist = artists.firstOrNull { it.id == args.artistId }
             render()
         }
     }
 
+    // Plain per-chip click listeners rather than ChipGroup's checked-state-change callback --
+    // see StatisticsFragment's setupTimeRangeChips for why the Custom chip needs this.
+    private fun setupTimeRangeChips() {
+        binding.statsTimeRangeChipToday.setOnClickListener { selectTimeRange(StatsTimeRange.Today) }
+        binding.statsTimeRangeChipWeek.setOnClickListener { selectTimeRange(StatsTimeRange.Week) }
+        binding.statsTimeRangeChipMonth.setOnClickListener { selectTimeRange(StatsTimeRange.Month) }
+        binding.statsTimeRangeChipYear.setOnClickListener { selectTimeRange(StatsTimeRange.Year) }
+        binding.statsTimeRangeChipCustom.setOnClickListener { showCustomRangePicker() }
+    }
+
+    private fun selectTimeRange(range: StatsTimeRange) {
+        selectedTimeRange = range
+        updateSelectedChip(range)
+        render()
+    }
+
+    private fun showCustomRangePicker() {
+        val picker = MaterialDatePicker.Builder.dateRangePicker()
+            .setTitleText(R.string.stats_time_range_custom_picker_title)
+            .build()
+        picker.addOnPositiveButtonClickListener { selection ->
+            selectTimeRange(
+                StatsTimeRange.Custom(
+                    startEpochDay = DailyPlayCountEntity.epochDayFromUtcMidnightMillis(selection.first),
+                    endEpochDay = DailyPlayCountEntity.epochDayFromUtcMidnightMillis(selection.second)
+                )
+            )
+        }
+        // Cancelling/dismissing leaves selectedTimeRange unchanged -- explicitly re-sync the
+        // chip row, undoing the ChipGroup's own auto-check of the Custom chip.
+        picker.addOnNegativeButtonClickListener { updateSelectedChip(selectedTimeRange) }
+        picker.addOnCancelListener { updateSelectedChip(selectedTimeRange) }
+        picker.show(childFragmentManager, "stats_time_range_custom_picker")
+    }
+
+    private fun updateSelectedChip(range: StatsTimeRange) {
+        val chipId = when (range) {
+            is StatsTimeRange.Today -> binding.statsTimeRangeChipToday.id
+            is StatsTimeRange.Week -> binding.statsTimeRangeChipWeek.id
+            is StatsTimeRange.Month -> binding.statsTimeRangeChipMonth.id
+            is StatsTimeRange.Year -> binding.statsTimeRangeChipYear.id
+            is StatsTimeRange.Custom -> binding.statsTimeRangeChipCustom.id
+        }
+        binding.statsTimeRangeChipGroup.check(chipId)
+    }
+
     private fun render() {
         val artist = currentArtist ?: return
+        val requestId = ++renderRequestId
+        val range = selectedTimeRange
         lifecycleScope.launch {
-            // One query decorates every song in the discography with its real playtime;
+            // One query covers every song in the discography for the selected range;
             // Overview and Top Songs read it directly, Top Albums sums it per album.
-            val songsWithPlayTime = withContext(IO) {
-                get<RealRepository>().songsWithPlayTime(artist.songs)
+            val playTimeBySongId = withContext(IO) {
+                get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
             }
-            renderOverview(artist, songsWithPlayTime)
-            renderTopAlbums(artist, songsWithPlayTime)
-            renderTopSongs(songsWithPlayTime)
+            if (requestId != renderRequestId) return@launch
+            renderOverview(artist, playTimeBySongId)
+            renderTopAlbums(artist, playTimeBySongId)
+            renderTopSongs(artist, playTimeBySongId)
         }
     }
 
-    private fun renderOverview(artist: Artist, songsWithPlayTime: List<Song>) {
-        val totalPlaytimeMillis = songsWithPlayTime.sumOf { it.playTime }
+    private fun renderOverview(artist: Artist, playTimeBySongId: Map<Long, Long>) {
+        val totalPlaytimeMillis = artist.songs.sumOf { playTimeBySongId[it.id] ?: 0L }
         val discographyLengthMillis = artist.songs.sumOf { it.duration }
 
         binding.overviewContainer.removeAllViews()
@@ -128,9 +190,9 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
         )
     }
 
-    private fun renderTopAlbums(artist: Artist, songsWithPlayTime: List<Song>) {
-        val playTimeByAlbumId = songsWithPlayTime.groupBy { it.albumId }
-            .mapValues { (_, songs) -> songs.sumOf { it.playTime } }
+    private fun renderTopAlbums(artist: Artist, playTimeBySongId: Map<Long, Long>) {
+        val playTimeByAlbumId = artist.songs.groupBy { it.albumId }
+            .mapValues { (_, songs) -> songs.sumOf { playTimeBySongId[it.id] ?: 0L } }
         val stats = artist.albums
             .map { album ->
                 AlbumStat(
@@ -149,9 +211,9 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
         }
     }
 
-    private fun renderTopSongs(songsWithPlayTime: List<Song>) {
-        val stats = songsWithPlayTime
-            .map { song -> SongStat(id = song.id, title = song.title, playedMillis = song.playTime) }
+    private fun renderTopSongs(artist: Artist, playTimeBySongId: Map<Long, Long>) {
+        val stats = artist.songs
+            .map { song -> SongStat(id = song.id, title = song.title, playedMillis = playTimeBySongId[song.id] ?: 0L) }
             .sortedByDescending { it.playedMillis }
             .take(MAX_TOP_SONGS)
 

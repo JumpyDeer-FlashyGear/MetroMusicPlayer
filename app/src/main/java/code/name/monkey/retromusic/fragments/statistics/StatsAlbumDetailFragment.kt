@@ -27,16 +27,18 @@ import androidx.navigation.fragment.navArgs
 import code.name.monkey.retromusic.EXTRA_ALBUM_ID
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.databinding.FragmentStatsAlbumDetailBinding
+import code.name.monkey.retromusic.db.DailyPlayCountEntity
 import code.name.monkey.retromusic.fragments.base.AbsMainActivityFragment
 import code.name.monkey.retromusic.glide.RetroGlideExtension
 import code.name.monkey.retromusic.glide.RetroGlideExtension.albumCoverOptions
 import code.name.monkey.retromusic.model.Album
-import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.model.stats.SongStat
+import code.name.monkey.retromusic.model.stats.StatsTimeRange
 import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.stats.StatsRowBinder
 import com.bumptech.glide.Glide
+import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.shape.MaterialShapeDrawable
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -47,23 +49,20 @@ import org.koin.android.ext.android.get
  * Album detail stats screen (see CLAUDE.md, Component 5; redesigned in Component 6's pivot
  * away from charts). Opened by tapping an album in Component 3's `StatsAlbumsFragment`.
  *
- * A strict subset of [StatsArtistDetailFragment]'s structure -- same Overview block, minus
- * the "Albums" row (this screen is scoped to a single album, so that count doesn't apply)
- * and with "Discography length" renamed "Album length", plus a single ranked list: **Top
- * Songs**, which (unlike the artist screen's capped-at-15 version) shows **every** song on
- * this album, since the brief (see CLAUDE.md, Component 5) asks for the full song list here.
+ * A strict subset of [StatsArtistDetailFragment]'s structure -- same time-range chip row,
+ * same Overview block minus the "Albums" row (this screen is scoped to a single album, so
+ * that count doesn't apply) and with "Discography length" renamed "Album length", plus a
+ * single ranked list: **Top Songs**, which (unlike the artist screen's capped-at-15 version)
+ * shows **every** song on this album, since the brief (see CLAUDE.md, Component 5) asks for
+ * the full song list here.
  *
- * Unlike the artist screen, there's no further per-song breakdown chart here — the brief
- * (see CLAUDE.md, Component 5) only asks for the time-series view, so this screen is
- * intentionally a strict subset of [StatsArtistDetailFragment] (same toolbar/time-window/
- * chart-card structure, minus the by-album pie section), not a copy with a section removed
- * after the fact.
- *
- * Phase B (Component 7): playtime is real now, resolved the same way
- * [StatsArtistDetailFragment] resolves it -- [RealRepository.songsWithPlayTime] decorates
- * [Album.songs] with each song's real `PlayCountEntity.playTime` in one query. The album
- * itself is real, found by id in [libraryViewModel]'s album list -- same lookup-by-id
- * pattern Component 4 used for its artist lookup.
+ * Phase B (Component 7) + time-range picker follow-up: playtime for the selected range comes
+ * from [RealRepository.playTimeInRange], the same source [StatsArtistDetailFragment] uses --
+ * see that class's doc comment for the pattern this mirrors (same picker, same request-id
+ * guard). Album length stays on [Album.songs]' real duration, library-wide and unaffected by
+ * the picker, same as the artist screen's Discography length. The album itself is real,
+ * found by id in [libraryViewModel]'s album list -- same lookup-by-id pattern Component 4
+ * used for its artist lookup.
  */
 class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats_album_detail) {
 
@@ -71,6 +70,12 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
     private val binding get() = _binding!!
     private val args by navArgs<StatsAlbumDetailFragmentArgs>()
     private var currentAlbum: Album? = null
+
+    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.Week
+
+    // Guards against a slow-loading older range's result overwriting a newer selection's --
+    // same reasoning as StatisticsViewModel's genreStatsRequestId.
+    private var renderRequestId = 0
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -82,6 +87,8 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
         binding.appBarLayout.statusBarForeground =
             MaterialShapeDrawable.createWithElevationOverlay(requireContext())
 
+        setupTimeRangeChips()
+
         libraryViewModel.getAlbums().observe(viewLifecycleOwner) { albums ->
             val album = albums.firstOrNull { it.id == args.albumId }
             currentAlbum = album
@@ -90,6 +97,52 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
             }
             render()
         }
+    }
+
+    // Plain per-chip click listeners rather than ChipGroup's checked-state-change callback --
+    // see StatisticsFragment's setupTimeRangeChips for why the Custom chip needs this.
+    private fun setupTimeRangeChips() {
+        binding.statsTimeRangeChipToday.setOnClickListener { selectTimeRange(StatsTimeRange.Today) }
+        binding.statsTimeRangeChipWeek.setOnClickListener { selectTimeRange(StatsTimeRange.Week) }
+        binding.statsTimeRangeChipMonth.setOnClickListener { selectTimeRange(StatsTimeRange.Month) }
+        binding.statsTimeRangeChipYear.setOnClickListener { selectTimeRange(StatsTimeRange.Year) }
+        binding.statsTimeRangeChipCustom.setOnClickListener { showCustomRangePicker() }
+    }
+
+    private fun selectTimeRange(range: StatsTimeRange) {
+        selectedTimeRange = range
+        updateSelectedChip(range)
+        render()
+    }
+
+    private fun showCustomRangePicker() {
+        val picker = MaterialDatePicker.Builder.dateRangePicker()
+            .setTitleText(R.string.stats_time_range_custom_picker_title)
+            .build()
+        picker.addOnPositiveButtonClickListener { selection ->
+            selectTimeRange(
+                StatsTimeRange.Custom(
+                    startEpochDay = DailyPlayCountEntity.epochDayFromUtcMidnightMillis(selection.first),
+                    endEpochDay = DailyPlayCountEntity.epochDayFromUtcMidnightMillis(selection.second)
+                )
+            )
+        }
+        // Cancelling/dismissing leaves selectedTimeRange unchanged -- explicitly re-sync the
+        // chip row, undoing the ChipGroup's own auto-check of the Custom chip.
+        picker.addOnNegativeButtonClickListener { updateSelectedChip(selectedTimeRange) }
+        picker.addOnCancelListener { updateSelectedChip(selectedTimeRange) }
+        picker.show(childFragmentManager, "stats_time_range_custom_picker")
+    }
+
+    private fun updateSelectedChip(range: StatsTimeRange) {
+        val chipId = when (range) {
+            is StatsTimeRange.Today -> binding.statsTimeRangeChipToday.id
+            is StatsTimeRange.Week -> binding.statsTimeRangeChipWeek.id
+            is StatsTimeRange.Month -> binding.statsTimeRangeChipMonth.id
+            is StatsTimeRange.Year -> binding.statsTimeRangeChipYear.id
+            is StatsTimeRange.Custom -> binding.statsTimeRangeChipCustom.id
+        }
+        binding.statsTimeRangeChipGroup.check(chipId)
     }
 
     private fun loadAlbumCover(album: Album) {
@@ -101,13 +154,16 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
 
     private fun render() {
         val album = currentAlbum ?: return
+        val requestId = ++renderRequestId
+        val range = selectedTimeRange
         lifecycleScope.launch {
-            val songsWithPlayTime = withContext(IO) {
-                get<RealRepository>().songsWithPlayTime(album.songs)
+            val playTimeBySongId = withContext(IO) {
+                get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
             }
             val genreName = withContext(IO) { resolveAlbumGenre(album) }
-            renderOverview(album, songsWithPlayTime, genreName)
-            renderTopSongs(songsWithPlayTime)
+            if (requestId != renderRequestId) return@launch
+            renderOverview(album, playTimeBySongId, genreName)
+            renderTopSongs(album, playTimeBySongId)
         }
     }
 
@@ -133,8 +189,8 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
         return null
     }
 
-    private fun renderOverview(album: Album, songsWithPlayTime: List<Song>, genreName: String?) {
-        val totalPlaytimeMillis = songsWithPlayTime.sumOf { it.playTime }
+    private fun renderOverview(album: Album, playTimeBySongId: Map<Long, Long>, genreName: String?) {
+        val totalPlaytimeMillis = album.songs.sumOf { playTimeBySongId[it.id] ?: 0L }
         val albumLengthMillis = album.songs.sumOf { it.duration }
 
         binding.overviewContainer.removeAllViews()
@@ -156,9 +212,9 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
         )
     }
 
-    private fun renderTopSongs(songsWithPlayTime: List<Song>) {
-        val stats = songsWithPlayTime
-            .map { song -> SongStat(id = song.id, title = song.title, playedMillis = song.playTime) }
+    private fun renderTopSongs(album: Album, playTimeBySongId: Map<Long, Long>) {
+        val stats = album.songs
+            .map { song -> SongStat(id = song.id, title = song.title, playedMillis = playTimeBySongId[song.id] ?: 0L) }
             .sortedByDescending { it.playedMillis }
 
         binding.topSongsContainer.removeAllViews()
