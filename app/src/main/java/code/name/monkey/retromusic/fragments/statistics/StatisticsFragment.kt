@@ -148,6 +148,8 @@ class StatisticsFragment : Fragment() {
             binding.overviewArtistsText.text = overview.artistCount.toString()
         }
         viewModel.displayGenreStats.observe(viewLifecycleOwner) { stats ->
+            binding.genresTotalPlaytimeText.text =
+                MusicUtil.getReadableDurationString(stats.sumOf { it.playedMillis })
             binding.genreListContainer.removeAllViews()
             stats.forEachIndexed { index, stat ->
                 val name = if (stat.id == StatisticsViewModel.OTHERS_ID) {

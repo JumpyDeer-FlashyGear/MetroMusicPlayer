@@ -158,7 +158,9 @@ class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_medi
                 }
             }
             if (requestId != renderRequestId) return@launch
-            val sorted = latestAlbums.sortedByDescending { playtimeByAlbumId.getValue(it.id) }
+            val sorted = latestAlbums
+                .filter { (playtimeByAlbumId[it.id] ?: 0L) > MIN_DISPLAY_MILLIS }
+                .sortedByDescending { playtimeByAlbumId.getValue(it.id) }
             adapter.playtimeMillisByAlbumId = playtimeByAlbumId
             adapter.swapDataSet(sorted)
             binding.empty.isVisible = sorted.isEmpty()
@@ -193,4 +195,9 @@ class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_medi
     }
 
     override fun onMenuItemSelected(item: MenuItem): Boolean = false
+
+    companion object {
+        /** An album only gets listed if it has more than this much playtime in the selected range -- same 1-second floor as the main screen's Top Genres list, see CLAUDE.md. */
+        private const val MIN_DISPLAY_MILLIS = 1000L
+    }
 }

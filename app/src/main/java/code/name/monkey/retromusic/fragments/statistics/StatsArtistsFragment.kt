@@ -163,7 +163,9 @@ class StatsArtistsFragment : AbsMainActivityFragment(R.layout.fragment_stats_med
                 }
             }
             if (requestId != renderRequestId) return@launch
-            val sorted = latestArtists.sortedByDescending { playtimeByArtistId.getValue(it.id) }
+            val sorted = latestArtists
+                .filter { (playtimeByArtistId[it.id] ?: 0L) > MIN_DISPLAY_MILLIS }
+                .sortedByDescending { playtimeByArtistId.getValue(it.id) }
             adapter.playtimeMillisByArtistId = playtimeByArtistId
             adapter.swapDataSet(sorted)
             binding.empty.isVisible = sorted.isEmpty()
@@ -199,4 +201,9 @@ class StatsArtistsFragment : AbsMainActivityFragment(R.layout.fragment_stats_med
     }
 
     override fun onMenuItemSelected(item: MenuItem): Boolean = false
+
+    companion object {
+        /** An artist only gets listed if it has more than this much playtime in the selected range -- same 1-second floor as the main screen's Top Genres list, see CLAUDE.md. */
+        private const val MIN_DISPLAY_MILLIS = 1000L
+    }
 }
