@@ -71,7 +71,7 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
     private val args by navArgs<StatsAlbumDetailFragmentArgs>()
     private var currentAlbum: Album? = null
 
-    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.Week
+    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.AllTime
 
     // Guards against a slow-loading older range's result overwriting a newer selection's --
     // same reasoning as StatisticsViewModel's genreStatsRequestId.
@@ -105,7 +105,7 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
         binding.statsTimeRangeChipToday.setOnClickListener { selectTimeRange(StatsTimeRange.Today) }
         binding.statsTimeRangeChipWeek.setOnClickListener { selectTimeRange(StatsTimeRange.Week) }
         binding.statsTimeRangeChipMonth.setOnClickListener { selectTimeRange(StatsTimeRange.Month) }
-        binding.statsTimeRangeChipYear.setOnClickListener { selectTimeRange(StatsTimeRange.Year) }
+        binding.statsTimeRangeChipAllTime.setOnClickListener { selectTimeRange(StatsTimeRange.AllTime) }
         binding.statsTimeRangeChipCustom.setOnClickListener { showCustomRangePicker() }
     }
 
@@ -139,7 +139,7 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
             is StatsTimeRange.Today -> binding.statsTimeRangeChipToday.id
             is StatsTimeRange.Week -> binding.statsTimeRangeChipWeek.id
             is StatsTimeRange.Month -> binding.statsTimeRangeChipMonth.id
-            is StatsTimeRange.Year -> binding.statsTimeRangeChipYear.id
+            is StatsTimeRange.AllTime -> binding.statsTimeRangeChipAllTime.id
             is StatsTimeRange.Custom -> binding.statsTimeRangeChipCustom.id
         }
         binding.statsTimeRangeChipGroup.check(chipId)
@@ -158,7 +158,11 @@ class StatsAlbumDetailFragment : AbsMainActivityFragment(R.layout.fragment_stats
         val range = selectedTimeRange
         lifecycleScope.launch {
             val playTimeBySongId = withContext(IO) {
-                get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
+                if (range is StatsTimeRange.AllTime) {
+                    get<RealRepository>().playCountSongs().associate { it.id to it.playTime }
+                } else {
+                    get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
+                }
             }
             val genreName = withContext(IO) { resolveAlbumGenre(album) }
             if (requestId != renderRequestId) return@launch

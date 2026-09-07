@@ -68,7 +68,7 @@ class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_medi
     private var latestAlbums: List<Album> = emptyList()
     private lateinit var adapter: StatsAlbumAdapter
 
-    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.Week
+    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.AllTime
 
     // Guards against a slow-loading older range's result overwriting a newer selection's --
     // same reasoning as StatisticsViewModel's genreStatsRequestId.
@@ -103,7 +103,7 @@ class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_medi
         binding.statsTimeRangeChipToday.setOnClickListener { selectTimeRange(StatsTimeRange.Today) }
         binding.statsTimeRangeChipWeek.setOnClickListener { selectTimeRange(StatsTimeRange.Week) }
         binding.statsTimeRangeChipMonth.setOnClickListener { selectTimeRange(StatsTimeRange.Month) }
-        binding.statsTimeRangeChipYear.setOnClickListener { selectTimeRange(StatsTimeRange.Year) }
+        binding.statsTimeRangeChipAllTime.setOnClickListener { selectTimeRange(StatsTimeRange.AllTime) }
         binding.statsTimeRangeChipCustom.setOnClickListener { showCustomRangePicker() }
     }
 
@@ -137,7 +137,7 @@ class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_medi
             is StatsTimeRange.Today -> binding.statsTimeRangeChipToday.id
             is StatsTimeRange.Week -> binding.statsTimeRangeChipWeek.id
             is StatsTimeRange.Month -> binding.statsTimeRangeChipMonth.id
-            is StatsTimeRange.Year -> binding.statsTimeRangeChipYear.id
+            is StatsTimeRange.AllTime -> binding.statsTimeRangeChipAllTime.id
             is StatsTimeRange.Custom -> binding.statsTimeRangeChipCustom.id
         }
         binding.statsTimeRangeChipGroup.check(chipId)
@@ -148,7 +148,11 @@ class StatsAlbumsFragment : AbsMainActivityFragment(R.layout.fragment_stats_medi
         val range = selectedTimeRange
         lifecycleScope.launch {
             val playtimeByAlbumId = withContext(IO) {
-                val playTimeBySongId = get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
+                val playTimeBySongId = if (range is StatsTimeRange.AllTime) {
+                    get<RealRepository>().playCountSongs().associate { it.id to it.playTime }
+                } else {
+                    get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
+                }
                 latestAlbums.associate { album ->
                     album.id to album.songs.sumOf { song -> playTimeBySongId[song.id] ?: 0L }
                 }

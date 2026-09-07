@@ -52,7 +52,6 @@
                     style="@style/StatsTimeRangeChipStyle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
                     android:text="@string/stats_time_range_week" />
 
                 <com.google.android.material.chip.Chip
@@ -63,11 +62,12 @@
                     android:text="@string/stats_time_range_month" />
 
                 <com.google.android.material.chip.Chip
-                    android:id="@+id/statsTimeRangeChipYear"
+                    android:id="@+id/statsTimeRangeChipAllTime"
                     style="@style/StatsTimeRangeChipStyle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/stats_time_range_year" />
+                    android:checked="true"
+                    android:text="@string/stats_time_range_all_time" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/statsTimeRangeChipCustom"

@@ -93,8 +93,8 @@ class StatisticsFragment : Fragment() {
         binding.statsTimeRangeChipMonth.setOnClickListener {
             viewModel.selectTimeRange(StatsTimeRange.Month)
         }
-        binding.statsTimeRangeChipYear.setOnClickListener {
-            viewModel.selectTimeRange(StatsTimeRange.Year)
+        binding.statsTimeRangeChipAllTime.setOnClickListener {
+            viewModel.selectTimeRange(StatsTimeRange.AllTime)
         }
         binding.statsTimeRangeChipCustom.setOnClickListener {
             showCustomRangePicker()
@@ -130,7 +130,7 @@ class StatisticsFragment : Fragment() {
             is StatsTimeRange.Today -> binding.statsTimeRangeChipToday.id
             is StatsTimeRange.Week -> binding.statsTimeRangeChipWeek.id
             is StatsTimeRange.Month -> binding.statsTimeRangeChipMonth.id
-            is StatsTimeRange.Year -> binding.statsTimeRangeChipYear.id
+            is StatsTimeRange.AllTime -> binding.statsTimeRangeChipAllTime.id
             is StatsTimeRange.Custom -> binding.statsTimeRangeChipCustom.id
         }
         binding.statsTimeRangeChipGroup.check(chipId)

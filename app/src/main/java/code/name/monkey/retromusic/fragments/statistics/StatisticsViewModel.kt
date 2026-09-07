@@ -32,8 +32,9 @@ import kotlinx.coroutines.launch
  * Time windows were removed entirely from every Statistics screen by Component 6, then
  * reintroduced on this screen only once real per-day playtime existed to back it (see
  * CLAUDE.md, Component 7 follow-up): [selectedTimeRange] drives [displayGenreStats] via
- * [RealRepository.playTimeInRange]. There is deliberately no "All Time" choice in the picker
- * -- [overviewStats]' Total Playtime figure covers that, unaffected by this picker.
+ * [RealRepository.playTimeInRange], except [StatsTimeRange.AllTime] which reads
+ * [RealRepository.playCountSongs] directly instead (the true all-time total, same source
+ * [overviewStats]' Total Playtime already used).
  */
 class StatisticsViewModel(private val realRepository: RealRepository) : ViewModel() {
 
@@ -95,7 +96,11 @@ class StatisticsViewModel(private val realRepository: RealRepository) : ViewMode
         val requestId = ++genreStatsRequestId
         viewModelScope.launch(IO) {
             val genres = realRepository.fetchGenres()
-            val playTimeBySongId = realRepository.playTimeInRange(range.startEpochDay, range.endEpochDay)
+            val playTimeBySongId = if (range is StatsTimeRange.AllTime) {
+                realRepository.playCountSongs().associate { it.id to it.playTime }
+            } else {
+                realRepository.playTimeInRange(range.startEpochDay, range.endEpochDay)
+            }
             val stats = genres.map { genre ->
                 val playedMillis = realRepository.getGenre(genre.id)
                     .sumOf { song -> playTimeBySongId[song.id] ?: 0L }
@@ -136,12 +141,12 @@ class StatisticsViewModel(private val realRepository: RealRepository) : ViewMode
         const val OTHERS_ID = -1L
 
         /**
-         * Picker default on first opening the screen. Not specified in the brief (which only
-         * fixed the five available choices); Week was picked as the most useful "at a glance"
-         * default -- Today is often too sparse for a meaningful genre breakdown, Month/Year
-         * dilute recent listening. Revisit if that assumption doesn't match actual usage.
+         * Picker default on first opening the screen. Reset to All Time on request -- it's
+         * both the most immediately familiar figure (it's what this screen always showed
+         * before the picker existed) and avoids an initially-empty-looking list for
+         * lighter/newer libraries where Today/Week/Month might show little to nothing yet.
          */
-        private val DEFAULT_TIME_RANGE: StatsTimeRange = StatsTimeRange.Week
+        private val DEFAULT_TIME_RANGE: StatsTimeRange = StatsTimeRange.AllTime
 
         /** At most this many individual genres are shown before the rest collapse into "Others" -- confirmed at 9, see CLAUDE.md. */
         private const val MAX_DISPLAYED_GENRES = 9

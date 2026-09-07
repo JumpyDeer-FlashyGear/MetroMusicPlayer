@@ -55,8 +55,9 @@ import org.koin.android.ext.android.get
  *
  * Time window was removed entirely (see CLAUDE.md, Component 6), then reintroduced on this
  * screen once real per-day playtime existed to back it -- see CLAUDE.md's Component 7
- * follow-up. [selectedTimeRange] drives [render] via [RealRepository.playTimeInRange];
- * there's no "All Time" choice in the picker, matching the Genre screen's picker.
+ * follow-up. [selectedTimeRange] drives [render] via [RealRepository.playTimeInRange],
+ * except [StatsTimeRange.AllTime] which reads [RealRepository.playCountSongs] directly
+ * instead (the true all-time total) -- same special-casing as the Genre screen's picker.
  *
  * Phase B (Component 7): both the artist list and the playtime used to sort/label it are
  * real now. Per-artist playtime for the selected range is the sum of [Artist.songs]' real
@@ -72,7 +73,7 @@ class StatsArtistsFragment : AbsMainActivityFragment(R.layout.fragment_stats_med
     private var latestArtists: List<Artist> = emptyList()
     private lateinit var adapter: StatsArtistAdapter
 
-    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.Week
+    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.AllTime
 
     // Guards against a slow-loading older range's result overwriting a newer selection's --
     // same reasoning as StatisticsViewModel's genreStatsRequestId.
@@ -107,7 +108,7 @@ class StatsArtistsFragment : AbsMainActivityFragment(R.layout.fragment_stats_med
         binding.statsTimeRangeChipToday.setOnClickListener { selectTimeRange(StatsTimeRange.Today) }
         binding.statsTimeRangeChipWeek.setOnClickListener { selectTimeRange(StatsTimeRange.Week) }
         binding.statsTimeRangeChipMonth.setOnClickListener { selectTimeRange(StatsTimeRange.Month) }
-        binding.statsTimeRangeChipYear.setOnClickListener { selectTimeRange(StatsTimeRange.Year) }
+        binding.statsTimeRangeChipAllTime.setOnClickListener { selectTimeRange(StatsTimeRange.AllTime) }
         binding.statsTimeRangeChipCustom.setOnClickListener { showCustomRangePicker() }
     }
 
@@ -141,7 +142,7 @@ class StatsArtistsFragment : AbsMainActivityFragment(R.layout.fragment_stats_med
             is StatsTimeRange.Today -> binding.statsTimeRangeChipToday.id
             is StatsTimeRange.Week -> binding.statsTimeRangeChipWeek.id
             is StatsTimeRange.Month -> binding.statsTimeRangeChipMonth.id
-            is StatsTimeRange.Year -> binding.statsTimeRangeChipYear.id
+            is StatsTimeRange.AllTime -> binding.statsTimeRangeChipAllTime.id
             is StatsTimeRange.Custom -> binding.statsTimeRangeChipCustom.id
         }
         binding.statsTimeRangeChipGroup.check(chipId)
@@ -152,7 +153,11 @@ class StatsArtistsFragment : AbsMainActivityFragment(R.layout.fragment_stats_med
         val range = selectedTimeRange
         lifecycleScope.launch {
             val playtimeByArtistId = withContext(IO) {
-                val playTimeBySongId = get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
+                val playTimeBySongId = if (range is StatsTimeRange.AllTime) {
+                    get<RealRepository>().playCountSongs().associate { it.id to it.playTime }
+                } else {
+                    get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
+                }
                 latestArtists.associate { artist ->
                     artist.id to artist.songs.sumOf { song -> playTimeBySongId[song.id] ?: 0L }
                 }

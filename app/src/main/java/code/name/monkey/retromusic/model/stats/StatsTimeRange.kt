@@ -8,12 +8,13 @@ import code.name.monkey.retromusic.db.DailyPlayCountEntity
  * filtering that Component 6 had removed entirely). [startEpochDay] and
  * [endEpochDay] are inclusive day-epoch bounds
  * ([DailyPlayCountEntity.todayEpochDay]-compatible), fed straight into
- * [code.name.monkey.retromusic.repository.RealRepository.playTimeInRange].
- *
- * There is deliberately no "All Time" option here — that figure lives in
- * the Overview block instead (`PlayCountEntity.playTime`, unaffected by
- * this picker); this type only covers the specific presets asked for
- * (Today/Week/Month/Year) plus a user-chosen Custom range.
+ * [code.name.monkey.retromusic.repository.RealRepository.playTimeInRange]
+ * -- except [AllTime], which every call site special-cases to query
+ * [code.name.monkey.retromusic.repository.RealRepository.playCountSongs]
+ * instead (the true all-time `PlayCountEntity.playTime` total, correct
+ * regardless of how far back `daily_play_count`'s rollup actually goes).
+ * [AllTime]'s own [startEpochDay]/[endEpochDay] are just a defensive wide
+ * fallback for that special-casing, not meant to be queried directly.
  */
 sealed class StatsTimeRange {
     abstract val startEpochDay: Long
@@ -34,9 +35,9 @@ sealed class StatsTimeRange {
         override val startEpochDay get() = endEpochDay - 29
     }
 
-    object Year : StatsTimeRange() {
+    object AllTime : StatsTimeRange() {
         override val endEpochDay get() = DailyPlayCountEntity.todayEpochDay()
-        override val startEpochDay get() = endEpochDay - 364
+        override val startEpochDay get() = 0L
     }
 
     data class Custom(

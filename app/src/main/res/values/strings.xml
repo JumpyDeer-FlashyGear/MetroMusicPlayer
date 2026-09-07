@@ -516,7 +516,7 @@
     <string name="stats_time_range_today">Today</string>
     <string name="stats_time_range_week">Week</string>
     <string name="stats_time_range_month">Month</string>
-    <string name="stats_time_range_year">Year</string>
+    <string name="stats_time_range_all_time">All Time</string>
     <string name="stats_time_range_custom">Custom</string>
     <string name="stats_time_range_custom_picker_title">Select range</string>
     <string name="simple">Simple</string>

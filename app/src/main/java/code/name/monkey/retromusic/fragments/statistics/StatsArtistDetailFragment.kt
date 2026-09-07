@@ -80,7 +80,7 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
     private val args by navArgs<StatsArtistDetailFragmentArgs>()
     private var currentArtist: Artist? = null
 
-    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.Week
+    private var selectedTimeRange: StatsTimeRange = StatsTimeRange.AllTime
 
     // Guards against a slow-loading older range's result overwriting a newer selection's --
     // same reasoning as StatisticsViewModel's genreStatsRequestId.
@@ -110,7 +110,7 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
         binding.statsTimeRangeChipToday.setOnClickListener { selectTimeRange(StatsTimeRange.Today) }
         binding.statsTimeRangeChipWeek.setOnClickListener { selectTimeRange(StatsTimeRange.Week) }
         binding.statsTimeRangeChipMonth.setOnClickListener { selectTimeRange(StatsTimeRange.Month) }
-        binding.statsTimeRangeChipYear.setOnClickListener { selectTimeRange(StatsTimeRange.Year) }
+        binding.statsTimeRangeChipAllTime.setOnClickListener { selectTimeRange(StatsTimeRange.AllTime) }
         binding.statsTimeRangeChipCustom.setOnClickListener { showCustomRangePicker() }
     }
 
@@ -144,7 +144,7 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
             is StatsTimeRange.Today -> binding.statsTimeRangeChipToday.id
             is StatsTimeRange.Week -> binding.statsTimeRangeChipWeek.id
             is StatsTimeRange.Month -> binding.statsTimeRangeChipMonth.id
-            is StatsTimeRange.Year -> binding.statsTimeRangeChipYear.id
+            is StatsTimeRange.AllTime -> binding.statsTimeRangeChipAllTime.id
             is StatsTimeRange.Custom -> binding.statsTimeRangeChipCustom.id
         }
         binding.statsTimeRangeChipGroup.check(chipId)
@@ -158,7 +158,11 @@ class StatsArtistDetailFragment : AbsMainActivityFragment(R.layout.fragment_stat
             // One query covers every song in the discography for the selected range;
             // Overview and Top Songs read it directly, Top Albums sums it per album.
             val playTimeBySongId = withContext(IO) {
-                get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
+                if (range is StatsTimeRange.AllTime) {
+                    get<RealRepository>().playCountSongs().associate { it.id to it.playTime }
+                } else {
+                    get<RealRepository>().playTimeInRange(range.startEpochDay, range.endEpochDay)
+                }
             }
             if (requestId != renderRequestId) return@launch
             renderOverview(artist, playTimeBySongId)
