@@ -111,6 +111,23 @@ class MusicService : MediaBrowserServiceCompat(),
     @JvmField
     var nextPosition = -1
 
+    // Bumped on every openQueue() call. Lets an in-flight track load (and a
+    // gapless "next" hand-off armed before the bump) recognize it's been
+    // superseded by a newer queue/position, instead of applying stale
+    // results on top of newer state. Written on whichever thread calls
+    // openQueue()/openTrackAndPrepareNextAt() (normally the caller's own
+    // thread, not a background one), and read from the Default-dispatcher
+    // coroutine used for local playback loads, so it's @Volatile for
+    // cross-thread visibility rather than relying on @Synchronized alone.
+    @Volatile
+    private var playbackGeneration = 0
+
+    // The playbackGeneration that was current when nextPosition/the gapless
+    // "next" player were last armed by prepareNextImpl(). Checked by
+    // onTrackWentToNext() before trusting nextPosition.
+    @Volatile
+    private var nextPositionGeneration = -1
+
     @JvmField
     var pendingQuit = false
 
@@ -770,6 +787,15 @@ class MusicService : MediaBrowserServiceCompat(),
             Log.d("PlayTimeDebug", "onTrackWentToNext Added $songElapsedTime to $songID")
             saveSongPlayTime(songElapsedTime)
         }
+        if (nextPositionGeneration != playbackGeneration) {
+            // nextPosition was armed for a queue/track that's since been
+            // explicitly replaced (openQueue() bumps playbackGeneration and
+            // disarms the gapless player, but this OS-level hand-off could
+            // already have been in flight). A newer
+            // openTrackAndPrepareNextAt() call now owns position/queue
+            // state, so leave it alone here.
+            return
+        }
         if (pendingQuit || repeatMode == REPEAT_MODE_NONE && isLastTrack) {
             playbackManager.setNextDataSource(null)
             pause(false)
@@ -804,6 +830,14 @@ class MusicService : MediaBrowserServiceCompat(),
         if (!playingQueue.isNullOrEmpty()
             && startPosition >= 0 && startPosition < playingQueue.size
         ) {
+            // Invalidate any in-flight track load and disarm gapless playback
+            // synchronously, on this thread, before the (backgrounded) reload
+            // below starts. Without this, a track that's already ending when
+            // the queue is replaced can win a race against the reload and
+            // leave playback on stale, pre-replacement state - see the
+            // queue-switch race notes in CLAUDE.md for the full story.
+            playbackGeneration++
+            playbackManager.setNextDataSource(null)
             // it is important to copy the playing queue here first as we might add/remove songs later
             originalPlayingQueue = ArrayList(playingQueue)
             this.playingQueue = ArrayList(originalPlayingQueue)
@@ -822,9 +856,28 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     @Synchronized
-    fun openTrackAndPrepareNextAt(position: Int, completion: (success: Boolean) -> Unit) {
+    fun openTrackAndPrepareNextAt(
+        position: Int,
+        generation: Int = playbackGeneration,
+        completion: (success: Boolean) -> Unit,
+    ) {
+        if (generation != playbackGeneration) {
+            // A newer openQueue()/playSongAt() call was issued after this one
+            // but got here first - this call is stale, so don't touch
+            // position/queue state that the newer call already owns.
+            completion(false)
+            return
+        }
         this.position = position
         openCurrent { success ->
+
+        if (generation != playbackGeneration) {
+            // A newer call arrived while setDataSource() was in flight for
+            // this one. Report the result but don't apply it - the newer
+            // load is responsible for position/notifyChange from here.
+            completion(success)
+            return@openCurrent
+        }
 
         if (!songPlayCountHelper.isSongSaved && songPlayCountHelper.song.id != -1L) {
             val songID = songPlayCountHelper.song.title
@@ -868,11 +921,16 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     fun playSongAt(position: Int) {
+        // Captured synchronously, on the caller's thread, before the launch
+        // below hands off to a background coroutine. This is what lets a
+        // stale completion recognize a newer call has since superseded it,
+        // regardless of which one's background work finishes first.
+        val myGeneration = playbackGeneration
         // Every chromecast method needs to run on main thread or you are greeted with IllegalStateException
         // So it will use Main dispatcher
         // And by using Default dispatcher for local playback we are reduce the burden of main thread
         serviceScope.launch(if (playbackManager.isLocalPlayback) Default else Main) {
-            openTrackAndPrepareNextAt(position) { success ->
+            openTrackAndPrepareNextAt(position, myGeneration) { success ->
                 if (success) {
                     play()
                 } else {
@@ -890,6 +948,7 @@ class MusicService : MediaBrowserServiceCompat(),
             val nextPosition = getNextPosition(false)
             playbackManager.setNextDataSource(getSongAt(nextPosition).uri.toString())
             this.nextPosition = nextPosition
+            this.nextPositionGeneration = playbackGeneration
         } catch (ignored: Exception) {
         }
     }
