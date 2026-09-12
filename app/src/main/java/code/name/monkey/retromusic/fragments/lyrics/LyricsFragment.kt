@@ -16,6 +16,7 @@ package code.name.monkey.retromusic.fragments.lyrics
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -46,6 +47,7 @@ import code.name.monkey.retromusic.lyrics.LrcView
 import code.name.monkey.retromusic.model.AudioTagInfo
 import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.network.lyrics.OnlineLyricsRepository
+import code.name.monkey.retromusic.service.MusicService
 import code.name.monkey.retromusic.util.FileUtils
 import code.name.monkey.retromusic.util.LyricUtil
 import code.name.monkey.retromusic.util.UriUtil
@@ -96,6 +98,7 @@ class LyricsFragment : AbsMainActivityFragment(R.layout.fragment_lyrics),
             registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
                 if (it.resultCode == Activity.RESULT_OK) {
                     FileUtils.copyFileToUri(requireContext(), cacheFile, song.uri)
+                    onLyricsSaved()
                 }
             }
         editSyncedLyricsLauncher =
@@ -106,6 +109,7 @@ class LyricsFragment : AbsMainActivityFragment(R.layout.fragment_lyrics),
                         os.write(syncedLyrics.toByteArray())
                         os.flush()
                     }
+                    onLyricsSaved()
                 }
             }
     }
@@ -290,12 +294,13 @@ class LyricsFragment : AbsMainActivityFragment(R.layout.fragment_lyrics),
                                 listOf(song.data), fieldKeyValueMap, null
                             )
                         )
+                        withContext(Dispatchers.Main) {
+                            onLyricsSaved()
+                        }
                     }
                 }
             }
-            positiveButton(res = R.string.save) {
-                loadNormalLyrics()
-            }
+            positiveButton(res = R.string.save)
             negativeButton(res = android.R.string.cancel)
         }
     }
@@ -347,11 +352,10 @@ class LyricsFragment : AbsMainActivityFragment(R.layout.fragment_lyrics),
                     }
                 } else {
                     LyricUtil.writeLrc(song, input.toString())
+                    onLyricsSaved()
                 }
             }
-            positiveButton(res = R.string.save) {
-                loadLRCLyrics()
-            }
+            positiveButton(res = R.string.save)
             negativeButton(res = android.R.string.cancel)
         }
     }
@@ -401,6 +405,21 @@ class LyricsFragment : AbsMainActivityFragment(R.layout.fragment_lyrics),
         }
     }
 
+    /**
+     * Called once an edit made through [editNormalLyrics]/[editSyncedLyrics] has actually
+     * finished being written to the file/tag - never straight from the dialog's Save tap,
+     * since on Android R+ that write only really happens after an async system permission
+     * prompt is accepted, and calling this too early would reload stale content. Refreshes
+     * this screen's own lyrics view and tells the Now Playing cover overlay
+     * ([code.name.monkey.retromusic.fragments.player.CoverLyricsFragment]) to refresh too,
+     * since it doesn't otherwise know an edit just happened.
+     */
+    private fun onLyricsSaved() {
+        if (_binding == null) return
+        loadLyrics()
+        requireContext().sendBroadcast(Intent(MusicService.LYRICS_CHANGED))
+    }
+
     override fun onResume() {
         super.onResume()
         updateHelper.start()
@@ -413,13 +432,33 @@ class LyricsFragment : AbsMainActivityFragment(R.layout.fragment_lyrics),
 
     override fun onDestroyView() {
         super.onDestroyView()
-        if (MusicPlayerRemote.playingQueue.isNotEmpty())
+        // Normally, this screen being torn down means the user is navigating away from Lyrics
+        // back to the rest of the app, so the Now Playing panel (collapsed to reveal this
+        // screen) should pop back up. But goToLyrics() re-navigating to this same destination
+        // (e.g. tapping "Fetch lyrics"/"Synced lyrics" in the cover's lyrics dialog while this
+        // screen is already the one underneath the panel) also tears down and recreates this
+        // fragment, and that is not the user leaving - it sets suppressPanelExpandOnDestroy so
+        // that transient teardown doesn't re-expand the panel out from under the fresh instance.
+        if (!suppressPanelExpandOnDestroy && MusicPlayerRemote.playingQueue.isNotEmpty()) {
             mainActivity.expandPanel()
+        }
+        suppressPanelExpandOnDestroy = false
         _binding = null
     }
 
     enum class LyricsType {
         NORMAL_LYRICS,
         SYNCED_LYRICS
+    }
+
+    companion object {
+        /**
+         * Set by [code.name.monkey.retromusic.fragments.base.goToLyrics] immediately before
+         * re-navigating to this destination while it's already the current one, so the
+         * outgoing instance's [onDestroyView] - fired as a side effect of that re-navigation,
+         * not of the user leaving - knows not to re-expand the Now Playing panel. Consumed
+         * (reset to false) as soon as [onDestroyView] reads it.
+         */
+        var suppressPanelExpandOnDestroy: Boolean = false
     }
 }

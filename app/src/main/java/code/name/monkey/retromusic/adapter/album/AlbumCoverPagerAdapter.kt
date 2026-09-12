@@ -15,17 +15,22 @@
 package code.name.monkey.retromusic.adapter.album
 
 import android.os.Bundle
+import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
+import androidx.core.widget.TextViewCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.lifecycleScope
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.activities.MainActivity
+import code.name.monkey.retromusic.extensions.dipToPix
 import code.name.monkey.retromusic.fragments.AlbumCoverStyle
 import code.name.monkey.retromusic.fragments.NowPlayingScreen.*
 import code.name.monkey.retromusic.fragments.base.goToLyrics
@@ -129,12 +134,66 @@ class AlbumCoverPagerAdapter(
             lifecycleScope.launch(Dispatchers.IO) {
                 val data: String? = MusicUtil.getLyrics(song)
                 withContext(Dispatchers.Main) {
+                    // Themed to match the alert dialog below, since a plain TextView built
+                    // from the fragment's own context wouldn't pick up the dialog's message
+                    // typography/color on its own.
+                    val dialogContext = ContextThemeWrapper(
+                        requireContext(),
+                        com.google.android.material.R.style.ThemeOverlay_MaterialComponents_Dialog_Alert
+                    )
+                    val hPadding = dipToPix(24f).toInt()
+                    val messageView = TextView(dialogContext).apply {
+                        text = if (data.isNullOrEmpty()) "No lyrics found" else data
+                        setTextIsSelectable(true)
+                        TextViewCompat.setTextAppearance(
+                            this,
+                            com.google.android.material.R.style.TextAppearance_MaterialComponents_Body1
+                        )
+                        setPadding(hPadding, dipToPix(20f).toInt(), hPadding, dipToPix(24f).toInt())
+                    }
+                    val scrollView = ScrollView(dialogContext).apply {
+                        addView(messageView)
+                    }
+
+                    // The stock setMessage()-based AlertDialog wraps a long message in its own
+                    // unbounded (WRAP_CONTENT) ScrollView, which is what made the button row
+                    // visibly jitter up and down whenever the lyrics were long enough to need
+                    // scrolling, until the user touched/scrolled it. Cap the scroll area's
+                    // height up front, before the dialog is ever shown, so its window is sized
+                    // correctly from its one and only layout pass.
+                    //
+                    // NOTE: this used to be done by clamping scrollView's height from a
+                    // ViewTreeObserver.OnGlobalLayoutListener + requestLayout() *after* the
+                    // dialog had already been shown once. That resize-after-show was what broke
+                    // the Save/Cancel buttons in the follow-up "Fetch lyrics" edit dialog further
+                    // down this flow: the dialog window's own touchable frame didn't reliably
+                    // follow that later resize, so the buttons kept the taller pre-clamp frame's
+                    // tap target - above where they were now actually drawn. Measuring and
+                    // capping the height once, up front, avoids resizing an already-shown
+                    // window at all.
+                    val maxHeight = (resources.displayMetrics.heightPixels * 0.5f).toInt()
+                    val assumedDialogWidth =
+                        (resources.displayMetrics.widthPixels * 0.85f).toInt() - hPadding * 2
+                    messageView.measure(
+                        View.MeasureSpec.makeMeasureSpec(
+                            assumedDialogWidth.coerceAtLeast(0),
+                            View.MeasureSpec.AT_MOST
+                        ),
+                        View.MeasureSpec.UNSPECIFIED
+                    )
+                    if (messageView.measuredHeight > maxHeight) {
+                        scrollView.layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            maxHeight
+                        )
+                    }
+
                     MaterialAlertDialogBuilder(
                         requireContext(),
                         com.google.android.material.R.style.ThemeOverlay_MaterialComponents_Dialog_Alert
                     ).apply {
                         setTitle(song.title)
-                        setMessage(if (data.isNullOrEmpty()) "No lyrics found" else data)
+                        setView(scrollView)
                         setNegativeButton(R.string.fetch_lyrics_online_short) { _, _ ->
                             goToLyrics(requireActivity(), autoFetchOnlineLyrics = true)
                         }

@@ -1,10 +1,15 @@
 package code.name.monkey.retromusic.fragments.player
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
@@ -20,6 +25,7 @@ import code.name.monkey.retromusic.helper.MusicPlayerRemote
 import code.name.monkey.retromusic.helper.MusicProgressViewUpdateHelper
 import code.name.monkey.retromusic.model.lyrics.AbsSynchronizedLyrics
 import code.name.monkey.retromusic.model.lyrics.Lyrics
+import code.name.monkey.retromusic.service.MusicService
 import code.name.monkey.retromusic.util.LyricUtil
 import code.name.monkey.retromusic.util.PreferenceUtil
 import code.name.monkey.retromusic.util.color.MediaNotificationProcessor
@@ -34,6 +40,18 @@ class CoverLyricsFragment : AbsMusicServiceFragment(R.layout.fragment_cover_lyri
     private var progressViewUpdateHelper: MusicProgressViewUpdateHelper? = null
     private var _binding: FragmentCoverLyricsBinding? = null
     private val binding get() = _binding!!
+
+    // Lyrics edits happen in LyricsFragment, a separate screen this fragment has no direct
+    // reference to, so it finds out a song's lyrics were just edited via this broadcast
+    // instead - see LyricsFragment.onLyricsSaved().
+    private var lyricsChangedReceiverRegistered = false
+    private val lyricsChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (PreferenceUtil.showLyrics) {
+                updateLyrics()
+            }
+        }
+    }
 
     private val lyricsLayout: FrameLayout get() = binding.playerLyrics
     private val lyricsLine1: TextView get() = binding.playerLyricsLine1
@@ -180,12 +198,23 @@ class CoverLyricsFragment : AbsMusicServiceFragment(R.layout.fragment_cover_lyri
         super.onResume()
         PreferenceManager.getDefaultSharedPreferences(requireContext())
             .registerOnSharedPreferenceChangeListener(this)
+        ContextCompat.registerReceiver(
+            requireContext(),
+            lyricsChangedReceiver,
+            IntentFilter(MusicService.LYRICS_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        lyricsChangedReceiverRegistered = true
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         PreferenceManager.getDefaultSharedPreferences(requireContext())
             .unregisterOnSharedPreferenceChangeListener(this)
+        if (lyricsChangedReceiverRegistered) {
+            requireContext().unregisterReceiver(lyricsChangedReceiver)
+            lyricsChangedReceiverRegistered = false
+        }
         progressViewUpdateHelper?.stop()
         _binding = null
     }

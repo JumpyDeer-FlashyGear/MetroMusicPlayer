@@ -56,6 +56,7 @@ import code.name.monkey.retromusic.extensions.*
 import code.name.monkey.retromusic.fragments.LibraryViewModel
 import code.name.monkey.retromusic.fragments.NowPlayingScreen
 import code.name.monkey.retromusic.fragments.ReloadType
+import code.name.monkey.retromusic.fragments.lyrics.LyricsFragment
 import code.name.monkey.retromusic.fragments.player.PlayerAlbumCoverFragment
 import code.name.monkey.retromusic.helper.MusicPlayerRemote
 import code.name.monkey.retromusic.interfaces.IPaletteColorHolder
@@ -453,11 +454,22 @@ fun goToLyrics(activity: Activity, autoFetchOnlineLyrics: Boolean = false) {
     activity.apply {
         //Hide Bottom Bar First, else Bottom Sheet doesn't collapse fully
         setBottomNavVisibility(false)
+
+        val navController = findNavController(R.id.fragment_container)
+        if (navController.currentDestination?.id == R.id.lyrics_fragment) {
+            // The Lyrics screen is already the one underneath the panel (e.g. the cover's
+            // lyrics dialog was reopened while it's sitting in the background). We're about
+            // to navigate to it again below to apply the new args, which tears down and
+            // recreates the fragment - tell its outgoing onDestroyView that this isn't the
+            // user leaving the screen, so it doesn't re-expand the panel we're collapsing.
+            LyricsFragment.suppressPanelExpandOnDestroy = true
+        }
+
         if (getBottomSheetBehavior().state == BottomSheetBehavior.STATE_EXPANDED) {
             collapsePanel()
         }
 
-        findNavController(R.id.fragment_container).navigate(
+        navController.navigate(
             R.id.lyrics_fragment,
             bundleOf(AUTO_FETCH_ONLINE_LYRICS_ARG to autoFetchOnlineLyrics),
             navOptions { launchSingleTop = true }
